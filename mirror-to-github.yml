@@ -27,7 +27,7 @@ variables:
   - name: ARTIFACTS_DIR
     value: artifacts
   - name: CSPROJ_PATH
-    value: AzureBlueSolutions.Json.NET.csproj
+    value: AzureBlueSolutions.Json.NET/AzureBlueSolutions.Json.NET.csproj
 
 steps:
   - checkout: self
@@ -35,54 +35,38 @@ steps:
     clean: true
     fetchDepth: 0
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # FIXED: Only mirror branches; for tag runs, skip branch push and just push tags
-  # ─────────────────────────────────────────────────────────────────────────────
   - script: |
       set -euo pipefail
-
       : "${COMMITTER_NAME?missing}"
       : "${COMMITTER_EMAIL?missing}"
       : "${GITHUB_OWNER?missing}"
       : "${GITHUB_REPO?missing}"
       : "${GITHUB_DEFAULT_BRANCH?missing}"
       : "${GITHUB_TOKEN?missing}"
-
       git config user.name "${COMMITTER_NAME}"
       git config user.email "${COMMITTER_EMAIL}"
-
       git remote remove github 2>/dev/null || true
       git remote add github "https://${GITHUB_TOKEN}@github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
-
       git fetch origin --prune
-
       SRC="${BUILD_SOURCEBRANCH}"
-
       if [[ "${SRC}" == refs/heads/* ]]; then
-        # Branch build: mirror branch -> GitHub default branch with safe lease
         SRC_BRANCH="${SRC##refs/heads/}"
         git checkout -B "${SRC_BRANCH}" "origin/${SRC_BRANCH}"
-
         if git fetch github "refs/heads/${GITHUB_DEFAULT_BRANCH}:refs/remotes/github/${GITHUB_DEFAULT_BRANCH}"; then
           OLD_SHA="$(git rev-parse -q --verify "refs/remotes/github/${GITHUB_DEFAULT_BRANCH}" || true)"
         else
           OLD_SHA=""
         fi
-
         if [ -n "${OLD_SHA}" ]; then
           git push --no-thin github "HEAD:refs/heads/${GITHUB_DEFAULT_BRANCH}" --force-with-lease="refs/heads/${GITHUB_DEFAULT_BRANCH}:${OLD_SHA}"
         else
           git push --no-thin github "HEAD:refs/heads/${GITHUB_DEFAULT_BRANCH}" --force
         fi
       else
-        # Tag build: avoid creating a branch named 'refs/tags/...'
         TAG_NAME="${SRC##refs/tags/}"
-        # Keep workspace valid without touching tag ref as a branch:
         git checkout --detach "origin/${GITHUB_DEFAULT_BRANCH}" >/dev/null 2>&1 || git checkout --detach
         echo "Tag build (${TAG_NAME}); skipping branch mirroring step."
       fi
-
-      # Always push tags (safe even if none changed)
       git push --no-thin github --tags || true
     displayName: "Mirror Azure branch ➜ GitHub main (safe lease)"
     env:
@@ -108,22 +92,14 @@ steps:
         if ! command -v jq >/dev/null 2>&1; then
           sudo apt-get update -y && sudo apt-get install -y jq
         fi
-
         SUMMARY="Automated mirror failed.
         Build: ${BUILD_URL}
         Pipeline: $(Build.DefinitionName)
         Run: $(Build.BuildNumber)
         Source branch: $(Build.SourceBranch)
         "
-
-        PAYLOAD=$(jq -n --arg title "Mirror to GitHub failed: $(Build.BuildNumber)" \
-                       --arg body "$SUMMARY" \
-                       '{title:$title, body:$body, labels:["ci","mirror","automated"]}')
-
-        curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                 -H "Accept: application/vnd.github+json" \
-                 https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues \
-                 -d "${PAYLOAD}"
+        PAYLOAD=$(jq -n --arg title "Mirror to GitHub failed: $(Build.BuildNumber)" --arg body "$SUMMARY" '{title:$title, body:$body, labels:["ci","mirror","automated"]}')
+        curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues" -d "${PAYLOAD}"
 
   - task: Bash@3
     displayName: "Build & Pack on tag"
@@ -132,10 +108,16 @@ steps:
       targetType: 'inline'
       script: |
         set -euo pipefail
+        export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+        export DOTNET_CLI_TELEMETRY_OPTOUT=1
+        CSPROJ="$(CSPROJ_PATH)"
+        if [ ! -f "$CSPROJ" ] && [ -f "AzureBlueSolutions.Json.NET/$CSPROJ" ]; then
+          CSPROJ="AzureBlueSolutions.Json.NET/$CSPROJ"
+        fi
         dotnet restore
         dotnet build --configuration "$(BUILD_CONFIGURATION)" --no-restore
         mkdir -p "$(ARTIFACTS_DIR)"
-        dotnet pack "$(CSPROJ_PATH)" -c "$(BUILD_CONFIGURATION)" -o "$(ARTIFACTS_DIR)" --no-build
+        dotnet pack "$CSPROJ" -c "$(BUILD_CONFIGURATION)" -o "$(ARTIFACTS_DIR)" --no-build
         ls -al "$(ARTIFACTS_DIR)"
 
   - task: Bash@3
@@ -150,60 +132,35 @@ steps:
       targetType: 'inline'
       script: |
         set -euo pipefail
-
         if ! command -v jq >/dev/null 2>&1; then
           sudo apt-get update -y && sudo apt-get install -y jq
         fi
-
         TAG_REF="$(Build.SourceBranch)"
         TAG_NAME="${TAG_REF##refs/tags/}"
-
-        RESP=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                     -H "Accept: application/vnd.github+json" \
-                     "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/${TAG_NAME}")
-
+        git fetch --tags --force || true
+        TAG_BODY="$(git for-each-ref "refs/tags/${TAG_NAME}" --format='%(contents)' || true)"
+        if [ -z "$TAG_BODY" ]; then
+          TAG_BODY="Release ${TAG_NAME} generated by Azure Pipelines."
+        fi
+        RESP=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/${TAG_NAME}")
         if echo "$RESP" | jq -e '.id' >/dev/null 2>&1; then
           RELEASE_ID=$(echo "$RESP" | jq -r '.id')
-          BODY="Release ${TAG_NAME} generated by Azure Pipelines."
-          curl -sS -X PATCH \
-               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-               -H "Accept: application/vnd.github+json" \
-               "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${RELEASE_ID}" \
-               -d "$(jq -n --arg body "$BODY" '{body:$body}')"
+          BODY="$TAG_BODY"
+          curl -sS -X PATCH -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${RELEASE_ID}" -d "$(jq -n --arg body "$BODY" '{body:$body}')"
         else
           NAME="AzureBlueSolutions.Json.NET ${TAG_NAME}"
-          BODY="Release ${TAG_NAME} generated by Azure Pipelines."
-          CREATE_PAYLOAD=$(jq -n \
-            --arg tag_name "$TAG_NAME" \
-            --arg name "$NAME" \
-            --arg body "$BODY" \
-            --argjson draft false \
-            --argjson prerelease false \
-            '{tag_name:$tag_name, name:$name, body:$body, draft:$draft, prerelease:$prerelease}')
-          CREATE_RESP=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                               -H "Accept: application/vnd.github+json" \
-                               "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases" \
-                               -d "$CREATE_PAYLOAD")
+          BODY="$TAG_BODY"
+          CREATE_PAYLOAD=$(jq -n --arg tag_name "$TAG_NAME" --arg name "$NAME" --arg body "$BODY" --argjson draft false --argjson prerelease false '{tag_name:$tag_name, name:$name, body:$body, draft:$draft, prerelease:$prerelease}')
+          CREATE_RESP=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases" -d "$CREATE_PAYLOAD")
           RELEASE_ID=$(echo "$CREATE_RESP" | jq -r '.id')
           [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]
         fi
-
-        ASSETS=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                         -H "Accept: application/vnd.github+json" \
-                         "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${RELEASE_ID}/assets?per_page=100")
-
+        ASSETS=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${RELEASE_ID}/assets?per_page=100")
         for f in "${ARTIFACTS_DIR}"/*; do
           [ -f "$f" ] || continue
           FNAME="$(basename "$f")"
-
           EXIST_ID=$(echo "$ASSETS" | jq -r ".[] | select(.name==\"${FNAME}\") | .id")
-
           if [ -n "${EXIST_ID}" ] && [ "${EXIST_ID}" != "null" ]; then
-            curl -sS -X DELETE -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                 "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/assets/${EXIST_ID}"
+            curl -sS -X DELETE -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/assets/${EXIST_ID}"
           fi
-
-          curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-               -H "Content-Type: application/octet-stream" \
-               --data-binary @"$f" \
-               "https://uploads.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${RELEASE_ID}/assets?name=${FNAME}"
+          curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Content-Type: application/octet-stream" --data-binary @"$f" "https://uploads.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${RELEASE_ID}/assets?name=${FNAME}"
