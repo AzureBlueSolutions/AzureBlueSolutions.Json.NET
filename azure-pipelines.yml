@@ -4,24 +4,28 @@ trigger:
   branches:
     include:
       - master
+      - main
 pr:
   branches:
     include:
       - master
+      - main
 
 jobs:
 - job: build_and_deploy_job
   displayName: Build and Deploy DocFX to SWA
   pool:
     vmImage: ubuntu-latest
+
   variables:
   - group: Azure-Static-Web-Apps-nice-grass-0fed7761e-variable-group
 
   steps:
   - checkout: self
     submodules: false
+    clean: true
+    fetchDepth: 0
 
-  # Build DocFX
   - task: UseDotNet@2
     displayName: Use .NET 8 SDK
     inputs:
@@ -34,24 +38,24 @@ jobs:
       echo "Installing DocFX..."
       dotnet tool update -g docfx
       export PATH="$HOME/.dotnet/tools:$PATH"
-  
+
       export DOCFX_SOURCE_REPOSITORY_URL="https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET"
       export DOCFX_SOURCE_BRANCH_NAME="main"
 
-      # Resolve repo root and output dir
+      git remote set-url origin https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET.git
+      git fetch origin --prune || true
+
       REPO_ROOT="$(pwd)"
       OUT_DIR="${REPO_ROOT}/_site"
       rm -rf "${OUT_DIR}"
       mkdir -p "${OUT_DIR}"
 
-      # Find docfx.json (preferred) or docfx.yml
       DOCFX_CFG="$(find "${REPO_ROOT}" -maxdepth 4 -type f \( -name docfx.json -o -name docfx.yml \) -not -path '*/.*/*' | head -n 1 || true)"
       if [ -z "${DOCFX_CFG}" ]; then
         echo "ERROR: Could not find docfx.json or docfx.yml in repo."
         exit 1
       fi
       DOCFX_DIR="$(dirname "${DOCFX_CFG}")"
-
       echo "DocFX config: ${DOCFX_CFG}"
       echo "DocFX working dir: ${DOCFX_DIR}"
       echo "DocFX output dir: ${OUT_DIR}"
@@ -80,4 +84,4 @@ jobs:
       azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_API_TOKEN_NICE_GRASS_0FED7761E)
       app_location: '_site'
       output_location: ''
-      skip_app_build: true      # important: do not run Oryx
+      skip_app_build: true  # important: do not run Oryx
