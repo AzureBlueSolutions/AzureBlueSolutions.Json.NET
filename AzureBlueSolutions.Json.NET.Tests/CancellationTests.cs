@@ -13,7 +13,6 @@ public sealed class CancellationTests
             ProduceTokenSpans = true,
             ProducePathMap = true
         };
-
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -33,7 +32,6 @@ public sealed class CancellationTests
             if (i > 0) sb.Append(',');
             sb.Append(i);
         }
-
         sb.Append("]}");
         var bigJson = sb.ToString();
 
@@ -45,14 +43,10 @@ public sealed class CancellationTests
         };
 
         using var cts = new CancellationTokenSource();
-        var task = Task.Run(async () =>
-        {
-            await Task.Yield();
-            return JsonParser.ParseSafeAsync(bigJson, options, cts.Token);
-        }, CancellationToken.None);
+        var parseTask = JsonParser.ParseSafeAsync(bigJson, options, cts.Token);
         cts.CancelAfter(15);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => await task);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await parseTask);
     }
 
     [Fact]
@@ -69,10 +63,8 @@ public sealed class CancellationTests
                 if (k > 0) objBuilder.Append(',');
                 objBuilder.Append('"').Append("k").Append(k).Append('"').Append(':').Append(i * 10 + k);
             }
-
             objBuilder.Append('}');
         }
-
         objBuilder.Append("]}");
         var bigValid = objBuilder.ToString();
 
@@ -84,13 +76,9 @@ public sealed class CancellationTests
         };
 
         using var cts = new CancellationTokenSource();
-        var task = Task.Run(async () =>
-        {
-            await Task.Yield();
-            return JsonParser.ParseSafeAsync(bigValid, options, cts.Token);
-        }, CancellationToken.None);
+        var parseTask = JsonParser.ParseSafeAsync(bigValid, options, cts.Token);
         cts.CancelAfter(25);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => { await task; });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await parseTask);
     }
 }
