@@ -1,7 +1,4 @@
-﻿using System.Linq;
-using AzureBlueSolutions.Json.NET;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class JsonIncremental_Tests
 {
@@ -12,7 +9,8 @@ public sealed class JsonIncremental_Tests
         var parse = JsonParser.ParseSafe(oldText, Profiles.Tolerant());
         var changePoint = oldText.IndexOf(']', StringComparison.Ordinal);
         var change = new TextChange(changePoint, changePoint, ", 2");
-        var (text, tokens, map) = JsonIncremental.ApplyChanges(oldText, parse.TokenSpans, parse.PathRanges, new[] { change }, 32);
+        var (text, tokens, map) =
+            JsonIncremental.ApplyChanges(oldText, parse.TokenSpans, parse.PathRanges, new[] { change }, 32);
         Assert.Contains("[1, 2]", text);
         Assert.True(tokens.Count > 0);
         Assert.True(map.ContainsKey("items"));
@@ -25,7 +23,8 @@ public sealed class JsonIncremental_Tests
         var parse = JsonParser.ParseSafe(oldText, Profiles.Tolerant());
         var changePoint = oldText.IndexOf(']', StringComparison.Ordinal);
         var change = new TextChange(changePoint, changePoint, ", 2");
-        var (text, tokens, map, reparsed) = JsonIncremental.ApplyChangesWithReparse(oldText, parse.TokenSpans, new[] { change }, Profiles.Tolerant(), 32);
+        var (text, tokens, map, reparsed) = JsonIncremental.ApplyChangesWithReparse(oldText, parse.TokenSpans,
+            new[] { change }, Profiles.Tolerant(), 32);
         Assert.Contains("[1, 2]", text);
         Assert.True(tokens.Count > 0);
         Assert.True(reparsed.Success);

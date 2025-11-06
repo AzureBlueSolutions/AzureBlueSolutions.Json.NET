@@ -35,11 +35,11 @@ public sealed class LspPathMapRegressionTests
     [Fact]
     public void Property_With_Comments_Around_Colon_Has_Name_And_Value()
     {
-        string json = """
-        {
-          /*a*/ "name" /*b*/ : /*c*/ "ReCrafter" /*d*/
-        }
-        """;
+        var json = """
+                   {
+                     /*a*/ "name" /*b*/ : /*c*/ "ReCrafter" /*d*/
+                   }
+                   """;
 
         var options = new ParseOptions
         {
@@ -59,12 +59,12 @@ public sealed class LspPathMapRegressionTests
     [Fact]
     public void Multiline_And_Escaped_Strings_Are_Mapped()
     {
-        string json = """
-        {
-          "multi": "line1\nline2",
-          "quoted": "a \"quoted\" value"
-        }
-        """;
+        var json = """
+                   {
+                     "multi": "line1\nline2",
+                     "quoted": "a \"quoted\" value"
+                   }
+                   """;
 
         var options = new ParseOptions
         {

@@ -5,7 +5,7 @@ public sealed class ParserSecurityTests
     [Fact]
     public void SizeLimitExceeded_Returns_E008_And_NoRoot()
     {
-        string input = new string('x', 10_000);
+        var input = new string('x', 10_000);
         var options = new ParseOptions
         {
             MaxDocumentLength = 1024,
@@ -24,7 +24,7 @@ public sealed class ParserSecurityTests
     [Fact]
     public void DepthLimitExceeded_Returns_E009()
     {
-        string deep = new string('[', 100) + "0" + new string(']', 100);
+        var deep = new string('[', 100) + "0" + new string(']', 100);
         var options = new ParseOptions
         {
             MaxDepth = 8,

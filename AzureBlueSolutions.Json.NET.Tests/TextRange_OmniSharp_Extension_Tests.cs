@@ -1,5 +1,4 @@
-﻿using AzureBlueSolutions.Json.NET;
-using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+﻿using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace AzureBlueSolutions.Json.NET.Tests;
 

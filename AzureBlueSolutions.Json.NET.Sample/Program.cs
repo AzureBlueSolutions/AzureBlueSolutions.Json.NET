@@ -19,7 +19,7 @@ public static class Program
     private static void TestSizeLimit()
     {
         Console.WriteLine("---- Case: Size Limit ----");
-        string big = new string(' ', 256); // trivial content; we set a tiny MaxDocumentLength to trigger
+        var big = new string(' ', 256); // trivial content; we set a tiny MaxDocumentLength to trigger
         var options = new ParseOptions
         {
             MaxDocumentLength = 128, // intentionally small
@@ -38,7 +38,7 @@ public static class Program
     private static void TestDepthLimit()
     {
         Console.WriteLine("---- Case: Depth Limit ----");
-        string deep = BuildDeepArray(64); // [[[[ ... ]]]]
+        var deep = BuildDeepArray(64); // [[[[ ... ]]]]
         var options = new ParseOptions
         {
             MaxDepth = 16, // purposely below actual depth
@@ -49,12 +49,8 @@ public static class Program
         ConsoleDiagnosticWriter.WriteErrors(result.Errors);
 
         foreach (var e in result.Errors)
-        {
             if (e.Code == DefaultErrorCodes.Resolve(ErrorKey.DepthLimitExceeded))
-            {
                 Console.WriteLine("Depth limit correctly enforced.");
-            }
-        }
 
         Console.WriteLine();
     }
@@ -63,17 +59,17 @@ public static class Program
     {
         Console.WriteLine("---- Case: Sanitization + LSP (tokens & path map) ----");
 
-        string json = """
-                      {
-                        // line comment
-                        "name": "ReCrafter",
-                        "version": "1.0.0",
-                        "features": ["lsp", "sanitization",],
-                        /* block comment */
-                        "config": { "depth": 1, "enabled": true, },
-                        "numbers": [1, 2, 3,]
-                      }
-                      """;
+        var json = """
+                   {
+                     // line comment
+                     "name": "ReCrafter",
+                     "version": "1.0.0",
+                     "features": ["lsp", "sanitization",],
+                     /* block comment */
+                     "config": { "depth": 1, "enabled": true, },
+                     "numbers": [1, 2, 3,]
+                   }
+                   """;
 
         var options = new ParseOptions
         {
@@ -91,10 +87,7 @@ public static class Program
         Console.WriteLine("Errors and warnings:");
         ConsoleDiagnosticWriter.WriteErrors(result.Errors);
 
-        if (result.Success)
-        {
-            Console.WriteLine("Parse succeeded after sanitization.");
-        }
+        if (result.Success) Console.WriteLine("Parse succeeded after sanitization.");
 
         if (!string.IsNullOrEmpty(result.SanitizedText))
         {
@@ -127,7 +120,7 @@ public static class Program
     private static void TestDuplicateKeys()
     {
         Console.WriteLine("---- Case: Duplicate Keys ----");
-        string dup = """{ "a": 1, "a": 2 }""";
+        var dup = """{ "a": 1, "a": 2 }""";
 
         var options = new ParseOptions
         {
@@ -142,15 +135,10 @@ public static class Program
 
         foreach (var e in result.Errors)
         {
-            if (e.Path is not null)
-            {
-                Console.WriteLine($"Error Path: {e.Path}");
-            }
+            if (e.Path is not null) Console.WriteLine($"Error Path: {e.Path}");
 
             if (e.Range is not null)
-            {
                 Console.WriteLine($"LSP Range anchor (zero-based): {e.Range.Start.Line}:{e.Range.Start.Column}");
-            }
         }
 
         Console.WriteLine();

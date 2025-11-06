@@ -1,22 +1,19 @@
-﻿using System.Linq;
-using Xunit;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class ParserSanitizationTests
 {
     [Fact]
     public void Comments_And_TrailingCommas_Removed_With_Diagnostics()
     {
-        string json = """
-        {
-          // c
-          "a": 1, 
-          /* bc */ 
-          "b": [1,2,],
-          "c": { "d": 3, }
-        }
-        """;
+        var json = """
+                   {
+                     // c
+                     "a": 1, 
+                     /* bc */ 
+                     "b": [1,2,],
+                     "c": { "d": 3, }
+                   }
+                   """;
 
         var options = new ParseOptions
         {
@@ -39,7 +36,7 @@ public sealed class ParserSanitizationTests
     [Fact]
     public void Bom_And_CRLF_Normalized_Report_Info_Diagnostics_When_Sanitizer_Runs()
     {
-        string withBomAndCrLf = "\uFEFF{\r\n  // c\r\n  \"n\": 1,\r\n}\r\n";
+        var withBomAndCrLf = "\uFEFF{\r\n  // c\r\n  \"n\": 1,\r\n}\r\n";
         var options = new ParseOptions
         {
             AllowComments = false,

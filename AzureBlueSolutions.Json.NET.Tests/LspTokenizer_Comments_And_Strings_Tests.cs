@@ -1,7 +1,4 @@
-﻿using System.Linq;
-using AzureBlueSolutions.Json.NET;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class LspTokenizer_Comments_And_Strings_Tests
 {
@@ -9,11 +6,11 @@ public sealed class LspTokenizer_Comments_And_Strings_Tests
     public void Tokenizer_Emits_Comment_Tokens_For_Line_And_Block()
     {
         const string json = """
-        {
-          // line
-          "a": 1, /* block */ "b": 2
-        }
-        """;
+                            {
+                              // line
+                              "a": 1, /* block */ "b": 2
+                            }
+                            """;
         var result = JsonParser.ParseSafe(json, Profiles.Tolerant());
         var kinds = result.TokenSpans.Select(t => t.Kind).ToArray();
         Assert.Contains(JsonLexemeKind.Comment, kinds);

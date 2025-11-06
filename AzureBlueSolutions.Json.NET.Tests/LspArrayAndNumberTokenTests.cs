@@ -5,14 +5,14 @@ public sealed class LspArrayAndNumberTokenTests
     [Fact]
     public void Arrays_Of_Objects_And_Arrays_Map_Value_Ranges()
     {
-        string json = """
-        {
-          "items": [
-            { "id": 1 },
-            [ true, null, 2.5, 1e3 ]
-          ]
-        }
-        """;
+        var json = """
+                   {
+                     "items": [
+                       { "id": 1 },
+                       [ true, null, 2.5, 1e3 ]
+                     ]
+                   }
+                   """;
 
         var options = new ParseOptions
         {
@@ -43,14 +43,14 @@ public sealed class LspArrayAndNumberTokenTests
     [Fact]
     public void Number_Formats_Tokenized_And_Mapped()
     {
-        string json = """
-        {
-          "n1": 0,
-          "n2": -1,
-          "n3": 0.25,
-          "n4": 1e10
-        }
-        """;
+        var json = """
+                   {
+                     "n1": 0,
+                     "n2": -1,
+                     "n3": 0.25,
+                     "n4": 1e10
+                   }
+                   """;
 
         var options = new ParseOptions
         {
@@ -73,9 +73,9 @@ public sealed class LspArrayAndNumberTokenTests
     [Fact]
     public void Booleans_And_Null_Tokenized_And_Mapped()
     {
-        string json = """
-        { "t": true, "f": false, "z": null }
-        """;
+        var json = """
+                   { "t": true, "f": false, "z": null }
+                   """;
 
         var options = new ParseOptions
         {

@@ -1,7 +1,4 @@
-﻿using AzureBlueSolutions.Json.NET;
-using Newtonsoft.Json.Linq;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class Extensions_LineInfo_Tests
 {
@@ -9,12 +6,12 @@ public sealed class Extensions_LineInfo_Tests
     public void GetLineInfo_Returns_Line_And_Column_For_Tokens()
     {
         const string json = """
-        {
-          "a": {
-            "b": 1
-          }
-        }
-        """;
+                            {
+                              "a": {
+                                "b": 1
+                              }
+                            }
+                            """;
         var options = new ParseOptions { ProduceTokenSpans = true, ProducePathMap = true, CollectLineInfo = true };
         var result = JsonParser.ParseSafe(json, options);
         Assert.True(result.Success);

@@ -5,13 +5,13 @@ public sealed class TokenizerInvariantsTests
     [Fact]
     public void TokenSpans_Are_Monotonic_By_Offset()
     {
-        string json = """
-                      {
-                        "a": 1, // c
-                        "b": [2,3],
-                        "c": { "d": "x" }
-                      }
-                      """;
+        var json = """
+                   {
+                     "a": 1, // c
+                     "b": [2,3],
+                     "c": { "d": "x" }
+                   }
+                   """;
 
         var options = new ParseOptions
         {
@@ -24,18 +24,15 @@ public sealed class TokenizerInvariantsTests
         Assert.True(result.TokenSpans.Count > 0);
 
         var offsets = result.TokenSpans.Select(t => t.Range.Start.Offset).ToArray();
-        for (int i = 1; i < offsets.Length; i++)
-        {
-            Assert.True(offsets[i] >= offsets[i - 1]);
-        }
+        for (var i = 1; i < offsets.Length; i++) Assert.True(offsets[i] >= offsets[i - 1]);
     }
 
     [Fact]
     public void TryFindToken_Fallback_Finds_Token_Inside_Range()
     {
-        string json = """
-                      { "x": "value" }
-                      """;
+        var json = """
+                   { "x": "value" }
+                   """;
 
         var options = new ParseOptions
         {

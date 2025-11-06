@@ -1,7 +1,4 @@
-﻿using System.Linq;
-using AzureBlueSolutions.Json.NET;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class PathRangeIncrementalUpdater_Tests
 {
@@ -9,11 +6,11 @@ public sealed class PathRangeIncrementalUpdater_Tests
     public void Update_Shifts_Ranges_When_Text_Is_Prepended()
     {
         const string oldText = """
-        {
-          "name": "a",
-          "age": 1
-        }
-        """;
+                               {
+                                 "name": "a",
+                                 "age": 1
+                               }
+                               """;
         var parse = JsonParser.ParseSafe(oldText, Profiles.Tolerant());
         var oldMap = parse.PathRanges;
         var change = new TextChange(0, 0, "\n");

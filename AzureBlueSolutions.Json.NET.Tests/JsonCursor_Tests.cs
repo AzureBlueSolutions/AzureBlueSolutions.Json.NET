@@ -1,5 +1,4 @@
-﻿using AzureBlueSolutions.Json.NET;
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 
 namespace AzureBlueSolutions.Json.NET.Tests;
 
@@ -22,14 +21,14 @@ public sealed class JsonCursor_Tests
     public void InsertProperty_Adds_Property_To_Object_With_Indent()
     {
         const string json = """
-        {
-          "obj": { }
-        }
-        """;
+                            {
+                              "obj": { }
+                            }
+                            """;
         var result = JsonParser.ParseSafe(json, Profiles.Tolerant());
         var cursor = JsonCursor.FromPath(result, "obj");
         Assert.NotNull(cursor);
-        var edit = cursor!.InsertProperty(json, "added", JToken.FromObject(123), addCommaIfNeeded: true, indent: "  ");
+        var edit = cursor!.InsertProperty(json, "added", JToken.FromObject(123), true, "  ");
         Assert.NotNull(edit);
         var newText = Replace(json, edit!.Range, edit!.NewText);
         Assert.Contains("\"added\": 123", newText);
@@ -50,7 +49,7 @@ public sealed class JsonCursor_Tests
 
         var reparsedAfterAppend = JsonParser.ParseSafe(afterAppend, Profiles.Tolerant());
         var idxCursor = JsonCursor.FromPath(reparsedAfterAppend, "arr");
-        var insertAt0 = idxCursor!.InsertArrayItem(afterAppend, JToken.FromObject(0), index: 0);
+        var insertAt0 = idxCursor!.InsertArrayItem(afterAppend, JToken.FromObject(0), 0);
         Assert.NotNull(insertAt0);
         var afterInsert = Replace(afterAppend, insertAt0!.Range, insertAt0!.NewText);
 

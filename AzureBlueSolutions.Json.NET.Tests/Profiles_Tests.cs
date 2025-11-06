@@ -1,6 +1,4 @@
-﻿using AzureBlueSolutions.Json.NET;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class Profiles_Tests
 {

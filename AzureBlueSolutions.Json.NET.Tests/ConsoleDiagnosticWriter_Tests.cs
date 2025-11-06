@@ -1,8 +1,4 @@
-﻿using System;
-using System.IO;
-using AzureBlueSolutions.Json.NET;
-
-namespace AzureBlueSolutions.Json.NET.Tests;
+﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
 public sealed class ConsoleDiagnosticWriter_Tests
 {
