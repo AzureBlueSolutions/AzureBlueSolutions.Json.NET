@@ -6,26 +6,43 @@
 		<Deterministic>true</Deterministic>
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+
 		<PackageId>AzureBlueSolutions.Json.NET</PackageId>
-		<Version>0.1.1</Version>
+
+		<!-- Version is provided by the pipeline via /p:PackageVersion=... -->
+		<Version>$(PackageVersion)</Version>
+
 		<Authors>AzureBlueSolutions</Authors>
 		<Company>AzureBlueSolutions</Company>
 		<Product>AzureBlueSolutions.Json.NET</Product>
-		<Description>A high-performance, LSP-friendly JSON parsing and sanitization library built on Newtonsoft.Json, with token spans, JSON path ranges, incremental tokenization, and recovery tooling.</Description>
+		<Description>
+			A high-performance, LSP-friendly JSON parsing and sanitization library built on Newtonsoft.Json,
+			with token spans, JSON path ranges, incremental tokenization, and recovery tooling.
+		</Description>
 		<PackageTags>json;newtonsoft;parser;sanitization;language-server;lsp;tokenizer;incremental</PackageTags>
+
 		<RepositoryUrl>https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageProjectUrl>https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET</PackageProjectUrl>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<!--<PackageIcon>icon.png</PackageIcon>-->
+		<!-- <PackageIcon>icon.png</PackageIcon> -->
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+
 		<IncludeSymbols>true</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 		<ContinuousIntegrationBuild Condition="'$(CI)' != ''">true</ContinuousIntegrationBuild>
-		<PackageReleaseNotes>See GitHub releases for detailed changelogs: https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET/releases</PackageReleaseNotes>
+		<PackageReleaseNotes>
+			See GitHub releases for detailed changelogs:
+			https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET/releases
+		</PackageReleaseNotes>
+
 		<IsPackable>true</IsPackable>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+		<!-- Avoid double-pack; the pipeline calls `dotnet pack` explicitly -->
+		<GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+
 		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
 		<DebugType>portable</DebugType>
@@ -40,7 +57,7 @@
 
 	<ItemGroup>
 		<None Include="README.md" Pack="true" PackagePath="" />
-		<!--<None Include="icon.png" Pack="true" PackagePath="" />-->
+		<!-- <None Include="icon.png" Pack="true" PackagePath="" /> -->
 		<None Include="LICENSE.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 </Project>

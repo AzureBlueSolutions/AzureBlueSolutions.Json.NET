@@ -22,7 +22,7 @@ pool:
 
 variables:
   BUILD_CONFIGURATION: 'Release'
-  CSPROJ_PATH: 'AzureBlueSolutions.Json.NET.csproj'
+  CSPROJ_PATH: 'AzureBlueSolutions.Json.NET/AzureBlueSolutions.Json.NET.csproj'   # ✅ Fixed path
   ARTIFACTS_DIR: 'artifacts'
   TAG_PREFIX: 'v'
 
