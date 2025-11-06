@@ -7,7 +7,7 @@
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<PackageId>AzureBlueSolutions.Json.NET</PackageId>
-		<Version>0.1.0</Version>
+		<Version>0.1.1</Version>
 		<Authors>AzureBlueSolutions</Authors>
 		<Company>AzureBlueSolutions</Company>
 		<Product>AzureBlueSolutions.Json.NET</Product>
