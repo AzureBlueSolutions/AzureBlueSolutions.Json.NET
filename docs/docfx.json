@@ -28,6 +28,7 @@
       "modern"
     ],
     "globalMetadata": {
+      "_disableContribution": true,
       "_enableSearch": true,
       "_enableDarkMode": true,
       "_disableBreadcrumb": false,
