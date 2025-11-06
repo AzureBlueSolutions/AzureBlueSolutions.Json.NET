@@ -1,74 +1,54 @@
+name: Azure Static Web Apps CI/CD
+
 trigger:
   branches:
     include:
       - master
-
 pr:
   branches:
     include:
       - master
 
-pool:
-  vmImage: 'ubuntu-latest'
+jobs:
+- job: build_and_deploy_job
+  displayName: Build and Deploy DocFX to SWA
+  pool:
+    vmImage: ubuntu-latest
+  variables:
+  - group: Azure-Static-Web-Apps-nice-grass-0fed7761e-variable-group
 
-variables:
-  buildConfiguration: 'Release'
-  siteOutput: '_site'
+  steps:
+  - checkout: self
+    submodules: false
 
-stages:
-- stage: Build
-  displayName: Build DocFX
-  jobs:
-  - job: build_docfx
+  # Build DocFX
+  - task: UseDotNet@2
+    displayName: Use .NET 8 SDK
+    inputs:
+      packageType: sdk
+      version: 8.x
+
+  - script: |
+      set -euo pipefail
+      dotnet tool update -g docfx
+      export PATH="$HOME/.dotnet/tools:$PATH"
+
+      # Find docfx.json or docfx.yml (adjust if you know the exact path)
+      DOCFX_CFG="$(find "$(pwd)" -maxdepth 4 -type f \( -name docfx.json -o -name docfx.yml \) -not -path '*/.*/*' | head -n 1 || true)"
+      if [ -z "${DOCFX_CFG}" ]; then
+        echo "ERROR: Could not find docfx.json or docfx.yml in repo."
+        exit 1
+      fi
+      DOCFX_DIR="$(dirname "${DOCFX_CFG}")"
+      mkdir -p "_site"
+      (cd "${DOCFX_DIR}" && docfx metadata "${DOCFX_CFG}" && docfx build "${DOCFX_CFG}" --output "$(pwd)/_site")
     displayName: Build DocFX site
-    steps:
-    - checkout: self
-      submodules: false
 
-    - task: UseDotNet@2
-      displayName: 'Use .NET 8 SDK'
-      inputs:
-        packageType: 'sdk'
-        version: '8.x'
-
-    - script: |
-        set -euo pipefail
-        dotnet tool update -g docfx
-        echo "##vso[task.setvariable variable=PATH]$HOME/.dotnet/tools:$(PATH)"
-      displayName: 'Install DocFX CLI'
-
-    - script: |
-        set -euo pipefail
-
-        echo "Repo root: $(Build.SourcesDirectory)"
-        echo "Searching for docfx.json or docfx.yml..."
-        DOCFX_CFG="$(find "$(Build.SourcesDirectory)" -maxdepth 4 -type f \( -name docfx.json -o -name docfx.yml \) -not -path '*/.*/*' | head -n 1 || true)"
-
-        if [ -z "${DOCFX_CFG}" ]; then
-          echo "ERROR: Could not find docfx.json or docfx.yml anywhere under $(Build.SourcesDirectory)."
-          echo "Add a DocFX config (e.g., /docfx.json or /docs/docfx.json), or tell the pipeline its path."
-          exit 1
-        fi
-
-        echo "Found DocFX config: ${DOCFX_CFG}"
-        DOCFX_DIR="$(dirname "${DOCFX_CFG}")"
-        echo "Using working directory: ${DOCFX_DIR}"
-
-        mkdir -p "$(Build.SourcesDirectory)/_site"
-
-        export PATH="$HOME/.dotnet/tools:$PATH"
-
-        pushd "${DOCFX_DIR}" >/dev/null
-        docfx metadata "${DOCFX_CFG}"
-        docfx build "${DOCFX_CFG}" --output "$(Build.SourcesDirectory)/_site"
-        popd >/dev/null
-
-        echo "DocFX build complete. Output: $(Build.SourcesDirectory)/_site"
-      displayName: 'Locate DocFX config + metadata + build'
-
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish _site as artifact'
-      inputs:
-        PathtoPublish: '$(Build.SourcesDirectory)/$(siteOutput)'
-        ArtifactName: 'docfx_site'
-        publishLocation: 'Container'
+  # Deploy to SWA (skip build; deploy the generated _site)
+  - task: AzureStaticWebApp@0
+    displayName: Deploy to Azure Static Web Apps
+    inputs:
+      azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_API_TOKEN_NICE_GRASS_0FED7761E)
+      app_location: "_site"           # point directly to built output
+      output_location: ""             # empty when skipping build
+      skip_app_build: true            # critical: do not run Oryx
