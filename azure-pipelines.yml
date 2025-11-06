@@ -34,6 +34,9 @@ jobs:
       echo "Installing DocFX..."
       dotnet tool update -g docfx
       export PATH="$HOME/.dotnet/tools:$PATH"
+  
+      export DOCFX_SOURCE_REPOSITORY_URL="https://github.com/AzureBlueSolutions/AzureBlueSolutions.Json.NET"
+      export DOCFX_SOURCE_BRANCH_NAME="main"
 
       # Resolve repo root and output dir
       REPO_ROOT="$(pwd)"
