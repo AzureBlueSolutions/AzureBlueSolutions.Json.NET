@@ -30,25 +30,51 @@ jobs:
 
   - script: |
       set -euo pipefail
+
+      echo "Installing DocFX..."
       dotnet tool update -g docfx
       export PATH="$HOME/.dotnet/tools:$PATH"
 
-      # Find docfx.json or docfx.yml (adjust if you know the exact path)
-      DOCFX_CFG="$(find "$(pwd)" -maxdepth 4 -type f \( -name docfx.json -o -name docfx.yml \) -not -path '*/.*/*' | head -n 1 || true)"
+      # Resolve repo root and output dir
+      REPO_ROOT="$(pwd)"
+      OUT_DIR="${REPO_ROOT}/_site"
+      rm -rf "${OUT_DIR}"
+      mkdir -p "${OUT_DIR}"
+
+      # Find docfx.json (preferred) or docfx.yml
+      DOCFX_CFG="$(find "${REPO_ROOT}" -maxdepth 4 -type f \( -name docfx.json -o -name docfx.yml \) -not -path '*/.*/*' | head -n 1 || true)"
       if [ -z "${DOCFX_CFG}" ]; then
         echo "ERROR: Could not find docfx.json or docfx.yml in repo."
         exit 1
       fi
       DOCFX_DIR="$(dirname "${DOCFX_CFG}")"
-      mkdir -p "_site"
-      (cd "${DOCFX_DIR}" && docfx metadata "${DOCFX_CFG}" && docfx build "${DOCFX_CFG}" --output "$(pwd)/_site")
+
+      echo "DocFX config: ${DOCFX_CFG}"
+      echo "DocFX working dir: ${DOCFX_DIR}"
+      echo "DocFX output dir: ${OUT_DIR}"
+
+      (cd "${DOCFX_DIR}" && docfx metadata "${DOCFX_CFG}")
+      (cd "${DOCFX_DIR}" && docfx build "${DOCFX_CFG}" --output "${OUT_DIR}")
+
+      if [ ! -f "${OUT_DIR}/index.html" ] && [ ! -f "${OUT_DIR}/Index.html" ]; then
+        echo "ERROR: DocFX build did not produce index.html at ${OUT_DIR}."
+        echo "Listing ${OUT_DIR}:"
+        ls -la "${OUT_DIR}" || true
+        exit 2
+      fi
     displayName: Build DocFX site
 
-  # Deploy to SWA (skip build; deploy the generated _site)
+  - task: PublishBuildArtifacts@1
+    displayName: Publish _site artifact
+    inputs:
+      PathtoPublish: '_site'
+      ArtifactName: 'docfx_site'
+      publishLocation: 'Container'
+
   - task: AzureStaticWebApp@0
     displayName: Deploy to Azure Static Web Apps
     inputs:
       azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_API_TOKEN_NICE_GRASS_0FED7761E)
-      app_location: "_site"           # point directly to built output
-      output_location: ""             # empty when skipping build
-      skip_app_build: true            # critical: do not run Oryx
+      app_location: '_site'
+      output_location: ''
+      skip_app_build: true      # important: do not run Oryx
