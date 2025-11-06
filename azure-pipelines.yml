@@ -3,38 +3,72 @@ trigger:
     include:
       - master
 
+pr:
+  branches:
+    include:
+      - master
+
 pool:
   vmImage: 'ubuntu-latest'
 
 variables:
+  buildConfiguration: 'Release'
   siteOutput: '_site'
 
-steps:
-- checkout: self
-  submodules: false
+stages:
+- stage: Build
+  displayName: Build DocFX
+  jobs:
+  - job: build_docfx
+    displayName: Build DocFX site
+    steps:
+    - checkout: self
+      submodules: false
 
-- task: UseDotNet@2
-  displayName: 'Use .NET 8 SDK'
-  inputs:
-    packageType: 'sdk'
-    version: '8.x'
+    - task: UseDotNet@2
+      displayName: 'Use .NET 8 SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '8.x'
 
-- script: |
-    dotnet tool update -g docfx
-    echo "##vso[task.setvariable variable=PATH]$HOME/.dotnet/tools:$(PATH)"
-  displayName: 'Install DocFX CLI'
+    - script: |
+        set -euo pipefail
+        dotnet tool update -g docfx
+        echo "##vso[task.setvariable variable=PATH]$HOME/.dotnet/tools:$(PATH)"
+      displayName: 'Install DocFX CLI'
 
-# Build DocFX from docs/ but emit to repo-root/_site
-# (set "build": { "dest": "../_site" } in docs/docfx.json)
-- script: |
-    docfx metadata
-    docfx build
-  displayName: 'docfx metadata + build'
-  workingDirectory: docs
+    - script: |
+        set -euo pipefail
 
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish _site as artifact'
-  inputs:
-    PathtoPublish: '$(siteOutput)'
-    ArtifactName: 'docfx_site'
-    publishLocation: 'Container'
+        echo "Repo root: $(Build.SourcesDirectory)"
+        echo "Searching for docfx.json or docfx.yml..."
+        DOCFX_CFG="$(find "$(Build.SourcesDirectory)" -maxdepth 4 -type f \( -name docfx.json -o -name docfx.yml \) -not -path '*/.*/*' | head -n 1 || true)"
+
+        if [ -z "${DOCFX_CFG}" ]; then
+          echo "ERROR: Could not find docfx.json or docfx.yml anywhere under $(Build.SourcesDirectory)."
+          echo "Add a DocFX config (e.g., /docfx.json or /docs/docfx.json), or tell the pipeline its path."
+          exit 1
+        fi
+
+        echo "Found DocFX config: ${DOCFX_CFG}"
+        DOCFX_DIR="$(dirname "${DOCFX_CFG}")"
+        echo "Using working directory: ${DOCFX_DIR}"
+
+        mkdir -p "$(Build.SourcesDirectory)/_site"
+
+        export PATH="$HOME/.dotnet/tools:$PATH"
+
+        pushd "${DOCFX_DIR}" >/dev/null
+        docfx metadata "${DOCFX_CFG}"
+        docfx build "${DOCFX_CFG}" --output "$(Build.SourcesDirectory)/_site"
+        popd >/dev/null
+
+        echo "DocFX build complete. Output: $(Build.SourcesDirectory)/_site"
+      displayName: 'Locate DocFX config + metadata + build'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish _site as artifact'
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)/$(siteOutput)'
+        ArtifactName: 'docfx_site'
+        publishLocation: 'Container'
