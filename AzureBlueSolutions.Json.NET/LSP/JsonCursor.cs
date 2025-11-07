@@ -17,6 +17,35 @@ namespace AzureBlueSolutions.Json.NET
     public sealed record TextEdit(TextRange Range, string NewText);
 
     /// <summary>
+    /// Groups multiple <see cref="TextEdit"/> items for batch application.
+    /// </summary>
+    /// <param name="Edits">
+    /// The ordered set of edits to apply.
+    /// </param>
+    public sealed record TextEditBatch(IReadOnlyList<TextEdit> Edits)
+    {
+        /// <summary>
+        /// Creates a batch from the specified edits.
+        /// </summary>
+        /// <param name="edits">One or more edits.</param>
+        /// <returns>A <see cref="TextEditBatch"/> containing the provided edits.</returns>
+        public static TextEditBatch Of(params TextEdit[] edits) => new(edits);
+
+        /// <summary>
+        /// Creates a batch from the specified edits, skipping any <c>null</c> entries.
+        /// </summary>
+        /// <param name="edits">A sequence of edits, possibly containing <c>null</c> items.</param>
+        /// <returns>A <see cref="TextEditBatch"/> containing only non‑null edits.</returns>
+        public static TextEditBatch FromNullable(IEnumerable<TextEdit?> edits)
+        {
+            var list = new List<TextEdit>();
+            foreach (var e in edits)
+                if (e is not null) list.Add(e);
+            return new TextEditBatch(list);
+        }
+    }
+
+    /// <summary>
     /// Enumerates the kinds of nodes addressable by a JSON cursor.
     /// </summary>
     public enum JsonCursorKind
@@ -104,13 +133,11 @@ namespace AzureBlueSolutions.Json.NET
         public static JsonCursor? FromPath(JsonParseResult result, string path)
         {
             if (result.Root is null) return null;
-
             var tok = SafeSelect(result.Root, path);
             if (tok is null) return null;
 
             result.PathRanges.TryGetValue(path, out var pr);
             var parentPath = ComputeParentPath(path);
-
             var kind = tok switch
             {
                 JProperty => JsonCursorKind.Property,
@@ -118,8 +145,22 @@ namespace AzureBlueSolutions.Json.NET
                 JArray => JsonCursorKind.Array,
                 _ => JsonCursorKind.Value
             };
-
             return new JsonCursor(path, kind, pr?.Name, pr?.Value, tok, parentPath);
+        }
+
+        /// <summary>
+        /// Attempts to create a <see cref="JsonCursor"/> from a parsed result and a JSON path.
+        /// </summary>
+        /// <param name="result">The parse result that contains the root token and path ranges.</param>
+        /// <param name="path">The JSON path to locate.</param>
+        /// <param name="cursor">
+        /// When successful, receives the created cursor; otherwise <c>null</c>.
+        /// </param>
+        /// <returns><c>true</c> if the path resolves; otherwise <c>false</c>.</returns>
+        public static bool TryFromPath(JsonParseResult result, string path, [NotNullWhen(true)] out JsonCursor? cursor)
+        {
+            cursor = FromPath(result, path);
+            return cursor is not null;
         }
 
         /// <summary>
@@ -156,6 +197,19 @@ namespace AzureBlueSolutions.Json.NET
         }
 
         /// <summary>
+        /// Attempts to replace the value at the cursor using its <see cref="ValueRange"/>.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="newValue">The JSON value to serialize with <see cref="Formatting.None"/>.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TrySet(string documentText, JToken newValue, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = Set(documentText, newValue);
+            return edit is not null;
+        }
+
+        /// <summary>
         /// Inserts a property into an object cursor as <c>"name": value</c> before the closing <c>}</c>.
         /// </summary>
         /// <param name="documentText">
@@ -187,6 +241,42 @@ namespace AzureBlueSolutions.Json.NET
         }
 
         /// <summary>
+        /// Attempts to insert a property into an object cursor as <c>"name": value</c>.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="name">Property name to insert.</param>
+        /// <param name="value">Property value as a <see cref="JToken"/>.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TryInsertProperty(string documentText, string name, JToken value, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = InsertProperty(documentText, name, value, true, "  ");
+            return edit is not null;
+        }
+
+        /// <summary>
+        /// Attempts to insert a property into an object cursor as <c>"name": value</c>.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="name">Property name to insert.</param>
+        /// <param name="value">Property value as a <see cref="JToken"/>.</param>
+        /// <param name="addCommaIfNeeded">Whether to add a comma when non-empty.</param>
+        /// <param name="indent">Indentation to use for the inserted line.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TryInsertProperty(
+            string documentText, 
+            string name, 
+            JToken value, 
+            bool addCommaIfNeeded, 
+            string indent,
+            [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = InsertProperty(documentText, name, value, addCommaIfNeeded, indent);
+            return edit is not null;
+        }
+
+        /// <summary>
         /// Inserts an array item at the end (or at <paramref name="index"/> when provided).
         /// </summary>
         /// <param name="documentText">
@@ -213,28 +303,311 @@ namespace AzureBlueSolutions.Json.NET
             return InsertArrayItemCore(documentText, arr, value, index, addCommaIfNeeded);
         }
 
+        /// <summary>
+        /// Attempts to insert an array item at the end.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="value">The array item as a <see cref="JToken"/>.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TryInsertArrayItem(
+            string documentText,
+            JToken value,
+            [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = InsertArrayItem(documentText, value, null, true);
+            return edit is not null;
+        }
+
+        /// <summary>
+        /// Attempts to insert an array item at the specified index (or append when <paramref name="index"/> is <c>null</c>).
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="value">The array item as a <see cref="JToken"/>.</param>
+        /// <param name="index">Target index, or <c>null</c> to append.</param>
+        /// <param name="addCommaIfNeeded">Whether to add a comma when non-empty.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TryInsertArrayItem(
+            string documentText,
+            JToken value,
+            int? index,
+            bool addCommaIfNeeded,
+            [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = InsertArrayItem(documentText, value, index, addCommaIfNeeded);
+            return edit is not null;
+        }
+
+        /// <summary>
+        /// Attempts to remove the property represented by this cursor.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="edit">When successful, receives the deletion edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the cursor is a property and the edit could be produced; otherwise <c>false</c>.</returns>
+        public bool TryRemoveProperty(string documentText, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = null;
+            if (Kind != JsonCursorKind.Property || Token is not JProperty prop || NameRange is null) return false;
+            if (prop.Parent is not JObject parent) return false;
+
+            var objectStart = FindTokenStartBrace(documentText, parent);
+            if (objectStart < 0) return false;
+            var objectEnd = FindMatchingBrace(documentText, objectStart);
+            if (objectEnd <= objectStart) return false;
+
+            var start = NameRange.Start.Offset;
+            var end = ValueRange?.End.Offset ?? start;
+
+            var forward = end;
+            ScanWhitespaceAndCommentsForward(documentText, ref forward);
+            var consumedTrailingComma = false;
+            if (forward < objectEnd && documentText[forward] == ',')
+            {
+                forward++;
+                while (forward < objectEnd && (documentText[forward] == ' ' || documentText[forward] == '\t')) forward++;
+                end = forward;
+                consumedTrailingComma = true;
+            }
+
+            if (!consumedTrailingComma)
+            {
+                var back = start;
+                while (back > objectStart && char.IsWhiteSpace(documentText[back - 1])) back--;
+                if (back > objectStart && documentText[back - 1] == ',')
+                {
+                    back--;
+                    var lineStart = LineStartOffset(documentText, back);
+                    var trim = back;
+                    while (trim > lineStart && documentText[trim - 1] == ' ') trim--;
+                    start = trim;
+                }
+            }
+
+            var range = new TextRange(
+                new TextPosition(LineOf(documentText, start), ColOf(documentText, start), start),
+                new TextPosition(LineOf(documentText, end), ColOf(documentText, end), end));
+
+            edit = new TextEdit(range, string.Empty);
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to remove the child property with the specified <paramref name="propertyName"/>
+        /// from this object cursor (or from a property whose value is an object).
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="propertyName">The property name to remove.</param>
+        /// <param name="edit">When successful, receives the deletion edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the property exists and the edit could be produced; otherwise <c>false</c>.</returns>
+        public bool TryRemoveProperty(string documentText, string propertyName, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = null;
+
+            JObject? targetObject = Kind switch
+            {
+                JsonCursorKind.Object when Token is JObject o => o,
+                JsonCursorKind.Property when Token is JProperty { Value: JObject vo } => vo as JObject,
+                _ => null
+            };
+
+            var prop = targetObject?.Property(propertyName, StringComparison.Ordinal);
+            if (prop is null) return false;
+
+            if (!TryComputePropertyDeletion(documentText, targetObject, prop, out var deletion))
+                return false;
+
+            edit = deletion;
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to remove an array item from an array cursor (or array-valued property) at <paramref name="index"/>.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="index">Zero-based index of the item to remove.</param>
+        /// <param name="edit">When successful, receives the deletion edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be produced; otherwise <c>false</c>.</returns>
+        public bool TryRemoveArrayItem(string documentText, int index, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = null;
+
+            JArray? array = Kind switch
+            {
+                JsonCursorKind.Array when Token is JArray a => a,
+                JsonCursorKind.Property when Token is JProperty { Value: JArray va } => va as JArray,
+                _ => null
+            };
+
+            if (array is null) return false;
+
+            var startBracket = FindTokenStartBracket(documentText, array);
+            if (startBracket < 0) return false;
+            var endBracket = FindMatchingBracket(documentText, startBracket);
+            if (endBracket <= startBracket) return false;
+
+            if (!TryGetArrayElementSpan(documentText, startBracket, endBracket, index, out var elemStart, out var elemEnd))
+                return false;
+
+            var deleteStart = elemStart;
+            var deleteEnd = elemEnd;
+
+            var forward = elemEnd;
+            ScanWhitespaceAndCommentsForward(documentText, ref forward);
+            var consumedTrailingComma = false;
+            if (forward < endBracket && documentText[forward] == ',')
+            {
+                forward++;
+                while (forward < endBracket && (documentText[forward] == ' ' || documentText[forward] == '\t')) forward++;
+                deleteEnd = forward;
+                consumedTrailingComma = true;
+            }
+
+            if (!consumedTrailingComma)
+            {
+                var back = elemStart;
+                while (back > startBracket && char.IsWhiteSpace(documentText[back - 1])) back--;
+                if (back > startBracket && documentText[back - 1] == ',')
+                {
+                    back--;
+                    var lineStart = LineStartOffset(documentText, back);
+                    var trim = back;
+                    while (trim > lineStart && documentText[trim - 1] == ' ') trim--;
+                    deleteStart = trim;
+                }
+            }
+
+            var range = new TextRange(
+                new TextPosition(LineOf(documentText, deleteStart), ColOf(documentText, deleteStart), deleteStart),
+                new TextPosition(LineOf(documentText, deleteEnd), ColOf(documentText, deleteEnd), deleteEnd));
+
+            edit = new TextEdit(range, string.Empty);
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to remove the node represented by this cursor when it is a property or an array item.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="edit">When successful, receives the deletion edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if a deletion edit was produced; otherwise <c>false</c>.</returns>
+        public bool TryRemoveSelf(string documentText, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = null;
+
+            if (Kind == JsonCursorKind.Property)
+                return TryRemoveProperty(documentText, out edit);
+
+            if (Token.Parent is JArray parentArray)
+            {
+                var itemIndex = IndexOfChild(parentArray, Token);
+                if (itemIndex >= 0)
+                    return TryRemoveArrayItem(documentText, itemIndex, out edit);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Attempts to replace the value at the cursor with an empty object (<c>{}</c>).
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TrySetObject(string documentText, [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = Set(documentText, new JObject());
+            return edit is not null;
+        }
+
+        /// <summary>
+        /// Attempts to insert a property with an empty object value (<c>"name": {}</c>) into an object cursor.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="name">Property name to insert.</param>
+        /// <param name="addCommaIfNeeded">Whether to add a comma when non-empty.</param>
+        /// <param name="indent">Indentation to use for the inserted line.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TryInsertObjectProperty(
+            string documentText,
+            string name,
+            bool addCommaIfNeeded,
+            string indent,
+            [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = InsertProperty(documentText, name, new JObject(), addCommaIfNeeded, indent);
+            return edit is not null;
+        }
+
+        /// <summary>
+        /// Attempts to insert an empty object (<c>{}</c>) as an array item.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="index">Target index, or <c>null</c> to append.</param>
+        /// <param name="addCommaIfNeeded">Whether to add a comma when non-empty.</param>
+        /// <param name="edit">When successful, receives the edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if the edit could be created; otherwise <c>false</c>.</returns>
+        public bool TryInsertObjectArrayItem(
+            string documentText, 
+            int? index,
+            bool addCommaIfNeeded,
+            [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = InsertArrayItem(documentText, new JObject(), index, addCommaIfNeeded);
+            return edit is not null;
+        }
+
+        /// <summary>
+        /// Attempts to remove the node at <paramref name="path"/> by creating a cursor
+        /// for that path and invoking <see cref="TryRemoveSelf(string, out TextEdit?)"/>.
+        /// </summary>
+        /// <param name="documentText">The full document text.</param>
+        /// <param name="result">The parse result that provides the root and path ranges.</param>
+        /// <param name="path">The JSON path to remove.</param>
+        /// <param name="edit">When successful, receives the deletion edit; otherwise <c>null</c>.</param>
+        /// <returns><c>true</c> if a deletion edit was produced; otherwise <c>false</c>.</returns>
+        public static bool TryRemoveAt(
+            string documentText,
+            JsonParseResult result,
+            string path,
+            [NotNullWhen(true)] out TextEdit? edit)
+        {
+            edit = null;
+            var target = FromPath(result, path);
+            return target is not null &&
+                   target.TryRemoveSelf(documentText, out edit);
+        }
+
+        /// <summary>
+        /// Creates a <see cref="TextEditBatch"/> from a set of optional edits, skipping any <c>null</c> entries.
+        /// </summary>
+        /// <param name="edits">One or more edits that may include <c>null</c>.</param>
+        /// <returns>A batch containing only the non‑null edits.</returns>
+        public static TextEditBatch CreateBatch(params TextEdit?[] edits)
+        {
+            var list = new List<TextEdit>(edits.Length);
+            list.AddRange(edits.OfType<TextEdit>());
+            return new TextEditBatch(list);
+        }
+
         private static TextEdit? InsertPropertyIntoObject(string text, JObject obj, string name, JToken value,
             bool addComma, string indent)
         {
             var start = FindTokenStartBrace(text, obj);
             if (start < 0) return null;
-
             var end = FindMatchingBrace(text, start);
             if (end <= start) return null;
 
             var needsComma = addComma && HasAnyPropertyBetween(text, start + 1, end);
             var baseIndent = ComputeIndent(text, start);
             var insertIndent = baseIndent + indent;
-
             var property = $"\"{name}\": {value.ToString(Formatting.None)}";
             var insert = (needsComma ? "," : "") + "\n" + insertIndent + property + "\n" + baseIndent;
 
-            var insertPoint = end;
-
             var range = new TextRange(
-                new TextPosition(LineOf(text, insertPoint), ColOf(text, insertPoint), insertPoint),
-                new TextPosition(LineOf(text, insertPoint), ColOf(text, insertPoint), insertPoint));
-
+                new TextPosition(LineOf(text, end), ColOf(text, end), end),
+                new TextPosition(LineOf(text, end), ColOf(text, end), end));
             return new TextEdit(range, insert);
         }
 
@@ -242,13 +615,11 @@ namespace AzureBlueSolutions.Json.NET
         {
             var start = FindTokenStartBracket(text, array);
             if (start < 0) return null;
-
             var end = FindMatchingBracket(text, start);
             if (end <= start) return null;
 
             var insertPoint = end;
             var hasAny = HasAnyElement(text, start, end);
-
             var insert = (hasAny && addComma ? "," : "") + " " + value.ToString(Formatting.None);
             if (!hasAny) insert = " " + value.ToString(Formatting.None) + " ";
 
@@ -262,26 +633,149 @@ namespace AzureBlueSolutions.Json.NET
             var range = new TextRange(
                 new TextPosition(LineOf(text, insertPoint), ColOf(text, insertPoint), insertPoint),
                 new TextPosition(LineOf(text, insertPoint), ColOf(text, insertPoint), insertPoint));
-
             return new TextEdit(range, insert);
+        }
+
+        private static bool TryComputePropertyDeletion(string text, JObject parentObject, JProperty property, out TextEdit? deletion)
+        {
+            deletion = null;
+
+            var objectStart = FindTokenStartBrace(text, parentObject);
+            if (objectStart < 0) return false;
+            var objectEnd = FindMatchingBrace(text, objectStart);
+            if (objectEnd <= objectStart) return false;
+
+            var (pl, pc) = GetStart(property);
+            var propOffsetSeed = ToOffset(text, pl, pc);
+
+            var nameQuoteStart = propOffsetSeed;
+            while (nameQuoteStart < text.Length && text[nameQuoteStart] != '"') nameQuoteStart++;
+            if (nameQuoteStart >= text.Length || nameQuoteStart >= objectEnd) return false;
+
+            var nameQuoteEnd = SkipString(text, nameQuoteStart);
+            if (nameQuoteEnd >= text.Length) return false;
+
+            var afterName = nameQuoteEnd + 1;
+            ScanWhitespaceAndCommentsForward(text, ref afterName);
+
+            if (afterName < text.Length && text[afterName] != ':')
+            {
+                while (afterName < text.Length && text[afterName] != ':' && afterName < objectEnd) afterName++;
+            }
+            if (afterName >= text.Length || afterName >= objectEnd) return false;
+            afterName++;
+
+            ScanWhitespaceAndCommentsForward(text, ref afterName);
+            if (afterName >= text.Length) return false;
+
+            var valueStart = afterName;
+            var valueEnd = FindJsonValueEnd(text, valueStart);
+            if (valueEnd < valueStart) return false;
+
+            var start = nameQuoteStart;
+            var end = valueEnd;
+
+            var forward = end;
+            ScanWhitespaceAndCommentsForward(text, ref forward);
+            var consumedTrailingComma = false;
+            if (forward < objectEnd && text[forward] == ',')
+            {
+                forward++;
+                while (forward < objectEnd && (text[forward] == ' ' || text[forward] == '\t')) forward++;
+                end = forward;
+                consumedTrailingComma = true;
+            }
+
+            if (!consumedTrailingComma)
+            {
+                var back = start;
+                while (back > objectStart && char.IsWhiteSpace(text[back - 1])) back--;
+                if (back > objectStart && text[back - 1] == ',')
+                {
+                    back--;
+                    var lineStart = LineStartOffset(text, back);
+                    var trim = back;
+                    while (trim > lineStart && text[trim - 1] == ' ') trim--;
+                    start = trim;
+                }
+            }
+
+            var range = new TextRange(
+                new TextPosition(LineOf(text, start), ColOf(text, start), start),
+                new TextPosition(LineOf(text, end), ColOf(text, end), end));
+            deletion = new TextEdit(range, string.Empty);
+            return true;
+        }
+
+        private static int FindJsonValueEnd(string text, int start)
+        {
+            var i = start;
+            if (i >= text.Length) return i;
+
+            ScanWhitespaceAndCommentsForward(text, ref i);
+            if (i >= text.Length) return i;
+
+            var c = text[i];
+
+            switch (c)
+            {
+                case '"':
+                {
+                    var endQuote = SkipString(text, i);
+                    return endQuote + 1 <= text.Length ? endQuote + 1 : text.Length;
+                }
+                case '{':
+                {
+                    var match = FindMatchingBrace(text, i);
+                    return match + 1 <= text.Length ? match + 1 : text.Length;
+                }
+                case '[':
+                {
+                    var match = FindMatchingBracket(text, i);
+                    return match + 1 <= text.Length ? match + 1 : text.Length;
+                }
+            }
+
+            if (StartsAt(text, i, "true")) return i + 4;
+            if (StartsAt(text, i, "false")) return i + 5;
+            if (StartsAt(text, i, "null")) return i + 4;
+
+            if (c == '-' || c == '+' || char.IsDigit(c))
+            {
+                var j = i;
+                if (text[j] == '-' || text[j] == '+') j++;
+                while (j < text.Length && char.IsDigit(text[j])) j++;
+                if (j < text.Length && text[j] == '.')
+                {
+                    j++;
+                    while (j < text.Length && char.IsDigit(text[j])) j++;
+                }
+                if (j < text.Length && (text[j] == 'e' || text[j] == 'E'))
+                {
+                    j++;
+                    if (j < text.Length && (text[j] == '-' || text[j] == '+')) j++;
+                    while (j < text.Length && char.IsDigit(text[j])) j++;
+                }
+                return j;
+            }
+
+            var k = i;
+            while (k < text.Length && text[k] != ',' && text[k] != '}' && text[k] != ']' && text[k] != '\n' && text[k] != '\r') k++;
+            return k;
         }
 
         private static string? ComputeParentPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return null;
-
-            var i = path.LastIndexOf('.');
-            var j = path.LastIndexOf('[');
-            var cut = Math.Max(i, j);
-
+            var dot = path.LastIndexOf('.');
+            var bracket = path.LastIndexOf('[');
+            var cut = Math.Max(dot, bracket);
             if (cut <= 0) return null;
-
             if (path[cut] == '[')
             {
                 var k = path.LastIndexOf(']', path.Length - 1);
                 if (k > cut) return path[..cut];
             }
-
             return path[..cut];
         }
 
@@ -323,24 +817,22 @@ namespace AzureBlueSolutions.Json.NET
             for (; i < text.Length; i++)
             {
                 var ch = text[i];
-
-                if (ch == '"')
+                switch (ch)
                 {
-                    i = SkipString(text, i);
-                    continue;
-                }
-
-                if (ch == '{')
-                {
-                    depth++;
-                }
-                else if (ch == '}')
-                {
-                    depth--;
-                    if (depth == 0) return i;
+                    case '"':
+                        i = SkipString(text, i);
+                        continue;
+                    case '{':
+                        depth++;
+                        break;
+                    case '}':
+                    {
+                        depth--;
+                        if (depth == 0) return i;
+                        break;
+                    }
                 }
             }
-
             return text.Length;
         }
 
@@ -354,24 +846,22 @@ namespace AzureBlueSolutions.Json.NET
             for (; i < text.Length; i++)
             {
                 var ch = text[i];
-
-                if (ch == '"')
+                switch (ch)
                 {
-                    i = SkipString(text, i);
-                    continue;
-                }
-
-                if (ch == '[')
-                {
-                    depth++;
-                }
-                else if (ch == ']')
-                {
-                    depth--;
-                    if (depth == 0) return i;
+                    case '"':
+                        i = SkipString(text, i);
+                        continue;
+                    case '[':
+                        depth++;
+                        break;
+                    case ']':
+                    {
+                        depth--;
+                        if (depth == 0) return i;
+                        break;
+                    }
                 }
             }
-
             return text.Length;
         }
 
@@ -379,28 +869,24 @@ namespace AzureBlueSolutions.Json.NET
         {
             var i = startQuote + 1;
             var escape = false;
-
             for (; i < text.Length; i++)
             {
                 var ch = text[i];
-
                 if (ch == '\n') continue;
-
                 if (escape)
                 {
                     escape = false;
                     continue;
                 }
-
-                if (ch == '\\')
+                switch (ch)
                 {
-                    escape = true;
-                    continue;
+                    case '\\':
+                        escape = true;
+                        continue;
+                    case '"':
+                        return i;
                 }
-
-                if (ch == '"') return i;
             }
-
             return i;
         }
 
@@ -440,68 +926,63 @@ namespace AzureBlueSolutions.Json.NET
             while (i < arrayEnd)
             {
                 var ch = text[i];
-
                 if (!inString)
                 {
-                    if (ch == '"')
+                    switch (ch)
                     {
-                        inString = true;
-                        if (currentIndex == index && candidateStart < 0) candidateStart = i;
-                        i++;
-                        continue;
-                    }
-
-                    if (ch is '[' or '{')
-                    {
-                        depth++;
-                        if (currentIndex == index && candidateStart < 0) candidateStart = i;
-                        i++;
-                        continue;
-                    }
-
-                    if (ch == ']' || ch == '}')
-                    {
-                        depth--;
-                        if (depth < 0) depth = 0;
-                        i++;
-                        continue;
-                    }
-
-                    if (ch == ',' && depth == 0)
-                    {
-                        if (currentIndex == index)
+                        case '"':
                         {
-                            elemStart = candidateStart >= 0 ? candidateStart : i;
-                            elemEnd = i;
-                            return true;
+                            inString = true;
+                            if (currentIndex == index && candidateStart < 0) candidateStart = i;
+                            i++;
+                            continue;
                         }
-
-                        currentIndex++;
-                        candidateStart = -1;
-                        i++;
-                        continue;
+                        case '[' or '{':
+                        {
+                            depth++;
+                            if (currentIndex == index && candidateStart < 0) candidateStart = i;
+                            i++;
+                            continue;
+                        }
+                        case ']' or '}':
+                        {
+                            depth--;
+                            if (depth < 0) depth = 0;
+                            i++;
+                            continue;
+                        }
+                        case ',' when depth == 0:
+                        {
+                            if (currentIndex == index)
+                            {
+                                elemStart = candidateStart >= 0 ? candidateStart : i;
+                                elemEnd = i;
+                                return true;
+                            }
+                            currentIndex++;
+                            candidateStart = -1;
+                            i++;
+                            continue;
+                        }
                     }
 
                     if (!char.IsWhiteSpace(ch) && currentIndex == index && candidateStart < 0) candidateStart = i;
-                    i++;
                 }
                 else
                 {
-                    if (ch == '\\')
+                    switch (ch)
                     {
-                        i += 2;
-                        continue;
+                        case '\\':
+                            i += 2;
+                            continue;
+                        case '"':
+                            inString = false;
+                            i++;
+                            continue;
                     }
-
-                    if (ch == '"')
-                    {
-                        inString = false;
-                        i++;
-                        continue;
-                    }
-
-                    i++;
                 }
+
+                i++;
             }
 
             if (currentIndex == index)
@@ -516,7 +997,7 @@ namespace AzureBlueSolutions.Json.NET
 
         private static (int line, int col) GetStart(JToken token)
         {
-            var li = (IJsonLineInfo)token;
+            IJsonLineInfo li = token;
             var l = Math.Max(0, li.LineNumber - 1);
             var c = Math.Max(0, li.LinePosition - 1);
             return (l, c);
@@ -527,14 +1008,12 @@ namespace AzureBlueSolutions.Json.NET
             var off = 0;
             var curLine = 0;
             var i = 0;
-
             while (i < text.Length && curLine < line)
             {
                 if (text[i] == '\n') curLine++;
                 off++;
                 i++;
             }
-
             return Math.Clamp(off + col, 0, text.Length);
         }
 
@@ -563,14 +1042,12 @@ namespace AzureBlueSolutions.Json.NET
         {
             var lineStart = LineStartOffset(text, anyOffsetOnLine);
             var i = lineStart;
-
             while (i < text.Length)
             {
                 var ch = text[i];
                 if (ch != ' ' && ch != '\t') break;
                 i++;
             }
-
             return text.Substring(lineStart, i - lineStart);
         }
 
@@ -583,6 +1060,51 @@ namespace AzureBlueSolutions.Json.NET
             var i = offset;
             while (i > 0 && text[i - 1] != '\n') i--;
             return i;
+        }
+
+        private static void ScanWhitespaceAndCommentsForward(string text, ref int index)
+        {
+            while (index < text.Length)
+            {
+                var ch = text[index];
+                if (char.IsWhiteSpace(ch)) { index++; continue; }
+                if (ch == '/' && index + 1 < text.Length)
+                {
+                    var next = text[index + 1];
+                    if (next == '/')
+                    {
+                        index += 2;
+                        while (index < text.Length && text[index] != '\n') index++;
+                        continue;
+                    }
+                    if (next == '*')
+                    {
+                        index += 2;
+                        while (index + 1 < text.Length && !(text[index] == '*' && text[index + 1] == '/')) index++;
+                        if (index + 1 < text.Length) index += 2;
+                        continue;
+                    }
+                }
+                break;
+            }
+        }
+
+        private static int IndexOfChild(JArray array, JToken child)
+        {
+            var i = 0;
+            foreach (var t in array)
+            {
+                if (ReferenceEquals(t, child)) return i;
+                i++;
+            }
+            return -1;
+        }
+
+        private static bool StartsAt(string text, int start, string s)
+        {
+            if (start + s.Length > text.Length) return false;
+            return !s.Where((t, i) =>
+                text[start + i] != t).Any();
         }
     }
 }
