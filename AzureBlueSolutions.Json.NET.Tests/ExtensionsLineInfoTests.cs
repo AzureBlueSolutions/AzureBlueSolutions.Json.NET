@@ -1,6 +1,6 @@
 ﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class Extensions_LineInfo_Tests
+public sealed class ExtensionsLineInfoTests
 {
     [Fact]
     public void GetLineInfo_Returns_Line_And_Column_For_Tokens()

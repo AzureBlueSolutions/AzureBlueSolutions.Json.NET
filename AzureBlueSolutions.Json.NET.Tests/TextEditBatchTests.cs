@@ -3,7 +3,7 @@
 /// <summary>
 ///     Tests for <see cref="TextEditBatch" /> factory helpers.
 /// </summary>
-public sealed class TextEditBatch_Tests
+public sealed class TextEditBatchTests
 {
     /// <summary>
     ///     Helper to create a <see cref="TextEdit" /> with simple ranges.

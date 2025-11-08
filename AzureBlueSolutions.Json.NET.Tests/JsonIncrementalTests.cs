@@ -1,6 +1,6 @@
 ﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class JsonIncremental_Tests
+public sealed class JsonIncrementalTests
 {
     [Fact]
     public void ApplyChanges_Updates_Text_And_Tokens_And_Shifts_Map()

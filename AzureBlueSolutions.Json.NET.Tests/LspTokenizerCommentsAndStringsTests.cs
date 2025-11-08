@@ -1,6 +1,6 @@
 ﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class LspTokenizer_Comments_And_Strings_Tests
+public sealed class LspTokenizerCommentsAndStringsTests
 {
     [Fact]
     public void Tokenizer_Emits_Comment_Tokens_For_Line_And_Block()

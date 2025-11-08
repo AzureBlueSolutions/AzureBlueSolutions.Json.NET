@@ -1,6 +1,6 @@
 ﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class Profiles_Tests
+public sealed class ProfilesTests
 {
     [Fact]
     public void Strict_Disables_Leniencies()

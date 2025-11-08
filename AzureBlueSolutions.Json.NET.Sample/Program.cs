@@ -1,166 +1,112 @@
-﻿namespace AzureBlueSolutions.Json.NET.Sample;
+﻿using AzureBlueSolutions.Json.NET;
 
-public static class Program
+internal class Program
 {
     private static void Main()
     {
-        Console.WriteLine("=== AzureBlueSolutions.Json.NET Program ===");
-        Console.WriteLine();
+        var jsonObject = "{ \"a\": 1, }";
+        var jsonArray = "[1, 2, ]";
 
-        TestSizeLimit();
-        TestDepthLimit();
-        TestSanitizationAndLsp();
-        TestDuplicateKeys();
+        Console.WriteLine("=== TOKEN DUMPS ===");
+        DumpTokens("OBJECT", jsonObject);
+        DumpTokens("ARRAY", jsonArray);
 
         Console.WriteLine();
-        Console.WriteLine("All demo cases finished.");
+        Console.WriteLine("=== POLICY CHECKS (TryRemoveCommaBeforeCloser) ===");
+        RunPolicyProbe("OBJECT", jsonObject);
+        RunPolicyProbe("ARRAY", jsonArray);
+
+        Console.WriteLine();
+        Console.WriteLine("Done.");
     }
 
-    private static void TestSizeLimit()
+    private static void DumpTokens(string caption, string json)
     {
-        Console.WriteLine("---- Case: Size Limit ----");
-        var big = new string(' ', 256); // trivial content; we set a tiny MaxDocumentLength to trigger
-        var options = new ParseOptions
+        var opts = new ParseOptions
         {
-            MaxDocumentLength = 128, // intentionally small
+            AllowComments = false,
+            CollectLineInfo = false,
             ProduceTokenSpans = true,
-            ProducePathMap = false
+            ProducePathMap = false,
+            NormalizeLineEndings = true,
+            IncludeSanitizationDiagnostics = false,
+            EnableSanitizationFallback = false
         };
 
-        var result = JsonParser.ParseSafe(big, options);
-        ConsoleDiagnosticWriter.WriteErrors(result.Errors);
+        var parsed = JsonParser.ParseSafe(json, opts);
 
-        // Show that tokenization still ran (helpful for a preview/editor)
-        Console.WriteLine($"TokenSpans produced: {result.TokenSpans.Count}");
+        Console.WriteLine($"--- {caption} ---");
+        Console.WriteLine(json);
+        Console.WriteLine($"Length: {json.Length}");
+        foreach (var t in parsed.TokenSpans)
+            Console.WriteLine($"{t.Kind,-12}  start={t.Range.Start.Offset,3}  end={t.Range.End.Offset,3}");
         Console.WriteLine();
     }
 
-    private static void TestDepthLimit()
+    private static void RunPolicyProbe(string caption, string json)
     {
-        Console.WriteLine("---- Case: Depth Limit ----");
-        var deep = BuildDeepArray(64); // [[[[ ... ]]]]
-        var options = new ParseOptions
+        var tokens = Lex(json);
+        var closer = FindFirst(tokens, JsonLexemeKind.RightBrace)
+                     ?? FindFirst(tokens, JsonLexemeKind.RightBracket);
+
+        Console.WriteLine($"--- {caption} ---");
+        Console.WriteLine(json);
+
+        if (closer is null)
         {
-            MaxDepth = 16, // purposely below actual depth
-            MaxDocumentLength = 4_000_000
-        };
+            Console.WriteLine("No closer token found; cannot probe TryRemoveCommaBeforeCloser.");
+            Console.WriteLine();
+            return;
+        }
 
-        var result = JsonParser.ParseSafe(deep, options);
-        ConsoleDiagnosticWriter.WriteErrors(result.Errors);
+        var caretAfterCloser = closer.Range.End.Offset;
+        var edit = CommaPolicy.TryRemoveCommaBeforeCloser(json, tokens, caretAfterCloser);
 
-        foreach (var e in result.Errors)
-            if (e.Code == DefaultErrorCodes.Resolve(ErrorKey.DepthLimitExceeded))
-                Console.WriteLine("Depth limit correctly enforced.");
+        if (edit is null)
+        {
+            Console.WriteLine("Edit: <null> (no trailing comma detected or closer not found)");
+            Console.WriteLine();
+            return;
+        }
 
+        Console.WriteLine("Edit:");
+        Console.WriteLine($"  Range.Start.Offset = {edit.Range.Start.Offset}");
+        Console.WriteLine($"  Range.End.Offset   = {edit.Range.End.Offset}");
+        Console.WriteLine($"  NewText            = \"{edit.NewText}\"");
+
+        var start = Math.Clamp(edit.Range.Start.Offset, 0, json.Length);
+        var end = Math.Clamp(edit.Range.End.Offset, start, json.Length);
+        var slice = json.Substring(start, end - start);
+        Console.WriteLine($"  Removed Slice      = \"{slice}\"");
+
+        var before = json.Substring(0, start);
+        var after = json.Substring(end);
+        var result = before + edit.NewText + after;
+        Console.WriteLine("  Resulting Text     = " + result);
         Console.WriteLine();
     }
 
-    private static void TestSanitizationAndLsp()
+    private static IReadOnlyList<JsonTokenSpan> Lex(string json)
     {
-        Console.WriteLine("---- Case: Sanitization + LSP (tokens & path map) ----");
-
-        var json = """
-                   {
-                     // line comment
-                     "name": "ReCrafter",
-                     "version": "1.0.0",
-                     "features": ["lsp", "sanitization",],
-                     /* block comment */
-                     "config": { "depth": 1, "enabled": true, },
-                     "numbers": [1, 2, 3,]
-                   }
-                   """;
-
         var options = new ParseOptions
         {
-            AllowComments = false, // make initial pass fail so sanitization kicks in
-            IncludeSanitizationDiagnostics = true, // show W100/W101
-            ReturnSanitizedText = true,
+            AllowComments = false,
+            CollectLineInfo = false,
             ProduceTokenSpans = true,
-            ProducePathMap = true,
-            MaxDepth = 128,
-            MaxDocumentLength = 4_000_000
+            ProducePathMap = false,
+            NormalizeLineEndings = true,
+            IncludeSanitizationDiagnostics = false,
+            EnableSanitizationFallback = false
         };
-
         var result = JsonParser.ParseSafe(json, options);
-
-        Console.WriteLine("Errors and warnings:");
-        ConsoleDiagnosticWriter.WriteErrors(result.Errors);
-
-        if (result.Success) Console.WriteLine("Parse succeeded after sanitization.");
-
-        if (!string.IsNullOrEmpty(result.SanitizedText))
-        {
-            Console.WriteLine("Sanitized text preview:");
-            Console.WriteLine(result.SanitizedText);
-        }
-
-        // Token span preview
-        Console.WriteLine();
-        Console.WriteLine("First 20 token spans (zero-based line:column -> line:column, offsets):");
-        foreach (var t in result.TokenSpans.Take(20))
-        {
-            var s = t.Range.Start;
-            var e = t.Range.End;
-            Console.WriteLine($"{t.Kind,-12}  [{s.Line}:{s.Column} ({s.Offset}) -> {e.Line}:{e.Column} ({e.Offset})]");
-        }
-
-        // Path map preview
-        Console.WriteLine();
-        Console.WriteLine("Path map samples:");
-        ShowPath(result, "name");
-        ShowPath(result, "version");
-        ShowPath(result, "features[1]");
-        ShowPath(result, "config.depth");
-        ShowPath(result, "numbers[2]");
-
-        Console.WriteLine();
+        return result.TokenSpans;
     }
 
-    private static void TestDuplicateKeys()
+    private static JsonTokenSpan? FindFirst(IReadOnlyList<JsonTokenSpan> tokens, JsonLexemeKind kind)
     {
-        Console.WriteLine("---- Case: Duplicate Keys ----");
-        var dup = """{ "a": 1, "a": 2 }""";
-
-        var options = new ParseOptions
-        {
-            DuplicatePropertyHandling = DuplicateKeyStrategy.Error,
-            ProduceTokenSpans = true,
-            ProducePathMap = true
-        };
-
-        var result = JsonParser.ParseSafe(dup, options);
-
-        ConsoleDiagnosticWriter.WriteErrors(result.Errors);
-
-        foreach (var e in result.Errors)
-        {
-            if (e.Path is not null) Console.WriteLine($"Error Path: {e.Path}");
-
-            if (e.Range is not null)
-                Console.WriteLine($"LSP Range anchor (zero-based): {e.Range.Start.Line}:{e.Range.Start.Column}");
-        }
-
-        Console.WriteLine();
-    }
-
-    private static string BuildDeepArray(int depth)
-    {
-        // [[[ 0 ]]]
-        return new string('[', depth) + "0" + new string(']', depth);
-    }
-
-    private static void ShowPath(JsonParseResult result, string path)
-    {
-        if (result.PathRanges.TryGetValue(path, out var pr))
-        {
-            var name = pr.Name is null ? "(n/a)" : $"{pr.Name.Start.Line}:{pr.Name.Start.Column}";
-            var value = pr.Value is null ? "(n/a)" : $"{pr.Value.Start.Line}:{pr.Value.Start.Column}";
-            Console.WriteLine($"{path,-20} name@{name}  value@{value}");
-        }
-        else
-        {
-            Console.WriteLine($"{path,-20} [no range found]");
-        }
+        foreach (var t in tokens)
+            if (t.Kind == kind)
+                return t;
+        return null;
     }
 }

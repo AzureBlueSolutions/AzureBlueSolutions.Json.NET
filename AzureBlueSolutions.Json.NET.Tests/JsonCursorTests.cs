@@ -2,7 +2,7 @@
 
 namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class JsonCursor_Tests
+public sealed class JsonCursorTests
 {
     [Fact]
     public void Set_Replaces_Value_Using_ValueRange()
