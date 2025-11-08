@@ -26,8 +26,18 @@ public sealed record TextPosition(int Line, int Column, int Offset);
 /// <param name="End">
 ///     The ending position of the range (exclusive).
 /// </param>
-public sealed record TextRange(TextPosition Start, TextPosition End)
+public sealed class TextRange(TextPosition Start, TextPosition End)
 {
+    /// <summary>
+    ///     The starting position of the range (inclusive).
+    /// </summary>
+    public TextPosition Start { get; init; } = Start;
+
+    /// <summary>
+    ///     The ending position of the range (exclusive).
+    /// </summary>
+    public TextPosition End { get; init; } = End;
+
     /// <summary>
     ///     Creates a <see cref="TextRange" /> from one-based line and column values,
     ///     converting them to zero-based positions. The range defaults to one character
@@ -69,6 +79,12 @@ public sealed record TextRange(TextPosition Start, TextPosition End)
         return new TextRange(
             Start with { Offset = startOffset },
             End with { Offset = endOffset });
+    }
+
+    public void Deconstruct(out TextPosition Start, out TextPosition End)
+    {
+        Start = this.Start;
+        End = this.End;
     }
 }
 

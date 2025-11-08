@@ -1,6 +1,6 @@
 ﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class IncrementalJsonTokenizer_Update_Tests
+public sealed class IncrementalJsonTokenizerUpdateTests
 {
     [Fact]
     public void Update_Replaces_String_In_Window_And_Merges_Spans()

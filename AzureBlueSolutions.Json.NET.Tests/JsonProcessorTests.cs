@@ -1,6 +1,6 @@
 ﻿namespace AzureBlueSolutions.Json.NET.Tests;
 
-public sealed class JsonProcessor_Tests
+public sealed class JsonProcessorTests
 {
     [Fact]
     public void Both_CorrectnessFirst_Prefers_Strict_When_Valid()

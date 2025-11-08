@@ -8,7 +8,7 @@ namespace AzureBlueSolutions.Json.NET.Tests;
 ///     Ensures we parse with edit-friendly options (PathMap + TokenSpans + LineInfo)
 ///     so JsonCursor can compute precise text edits for deletions.
 /// </summary>
-public sealed class JsonCursor_TryMethods_Tests
+public sealed class JsonCursorTryMethodsTests
 {
     private static ParseOptions EditFriendly()
     {
