@@ -6,30 +6,30 @@ using Newtonsoft.Json.Linq;
 namespace AzureBlueSolutions.Json.NET;
 
 /// <summary>
-/// High-level JSON parse helper that normalizes input, applies tolerant Newtonsoft.Json settings,
-/// and uses configurable sanitization and recovery passes to maximize successful parsing.
-/// Exposes both synchronous and asynchronous entry points and can optionally produce LSP-friendly artifacts.
+///     High-level JSON parse helper that normalizes input, applies tolerant Newtonsoft.Json settings,
+///     and uses configurable sanitization and recovery passes to maximize successful parsing.
+///     Exposes both synchronous and asynchronous entry points and can optionally produce LSP-friendly artifacts.
 /// </summary>
 public static class JsonParser
 {
     /// <summary>
-    /// Robust parse with normalization, tolerant settings, and sanitization fallback.
+    ///     Robust parse with normalization, tolerant settings, and sanitization fallback.
     /// </summary>
     /// <param name="text">The JSON text to parse.</param>
-    /// <param name="options">Optional parse options; if <c>null</c>, a new <see cref="ParseOptions"/> is used.</param>
-    /// <returns>A <see cref="JsonParseResult"/> with the parsed root (when successful) and any diagnostics.</returns>
+    /// <param name="options">Optional parse options; if <c>null</c>, a new <see cref="ParseOptions" /> is used.</param>
+    /// <returns>A <see cref="JsonParseResult" /> with the parsed root (when successful) and any diagnostics.</returns>
     public static JsonParseResult ParseSafe(string text, ParseOptions? options = null)
     {
         return ParseSafe(text, options, default);
     }
 
     /// <summary>
-    /// Robust parse with normalization, tolerant settings, and sanitization fallback.
+    ///     Robust parse with normalization, tolerant settings, and sanitization fallback.
     /// </summary>
     /// <param name="text">The JSON text to parse. If <c>null</c>, the result contains an error and no root.</param>
     /// <param name="options">Parse options controlling normalization, duplicate key handling, artifacts, etc.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A <see cref="JsonParseResult"/> with the parsed root (when successful) and any diagnostics.</returns>
+    /// <returns>A <see cref="JsonParseResult" /> with the parsed root (when successful) and any diagnostics.</returns>
     public static JsonParseResult ParseSafe(string? text, ParseOptions? options, CancellationToken cancellationToken)
     {
         options ??= new ParseOptions();
@@ -232,7 +232,7 @@ public static class JsonParser
                         MissingCommasInserted = post.MissingCommasInserted,
                         ClosersInserted = post.ClosersInserted
                     }
-                }, options, text, cancellationToken);
+                }, options, /* usedText: */ post.Changed ? post.Text : text, cancellationToken);
             }
 
             return WithLspArtifacts(new JsonParseResult
@@ -544,12 +544,12 @@ public static class JsonParser
     }
 
     /// <summary>
-    /// Asynchronously parses JSON with normalization, tolerant settings, and async sanitization fallback.
+    ///     Asynchronously parses JSON with normalization, tolerant settings, and async sanitization fallback.
     /// </summary>
     /// <param name="text">The JSON text to parse.</param>
-    /// <param name="options">Optional parse options; if <c>null</c>, a new <see cref="ParseOptions"/> is used.</param>
+    /// <param name="options">Optional parse options; if <c>null</c>, a new <see cref="ParseOptions" /> is used.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A task that resolves to a <see cref="JsonParseResult"/>.</returns>
+    /// <returns>A task that resolves to a <see cref="JsonParseResult" />.</returns>
     public static Task<JsonParseResult> ParseSafeAsync(
         string text,
         ParseOptions? options = null,
@@ -560,15 +560,15 @@ public static class JsonParser
 
 
     /// <summary>
-    /// Tries to parse JSON by skipping any leading comments, using the given <see cref="ParseOptions"/>.
-    /// Returns a result with either a root token or diagnostics when parsing fails.
+    ///     Tries to parse JSON by skipping any leading comments, using the given <see cref="ParseOptions" />.
+    ///     Returns a result with either a root token or diagnostics when parsing fails.
     /// </summary>
     /// <param name="text">The JSON text to parse.</param>
     /// <param name="options">The parse options to apply.</param>
     /// <param name="stage">A stage label for diagnostics (e.g., "Initial", "Sanitized", "Aggressive").</param>
-    /// <param name="resolve">Function that resolves <see cref="ErrorKey"/> to code strings.</param>
+    /// <param name="resolve">Function that resolves <see cref="ErrorKey" /> to code strings.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A <see cref="JsonParseResult"/> representing the outcome.</returns>
+    /// <returns>A <see cref="JsonParseResult" /> representing the outcome.</returns>
     private static JsonParseResult TryParseSkippingLeadingComments(
         string text,
         ParseOptions options,
@@ -649,7 +649,7 @@ public static class JsonParser
 
             var lspRange = ex is { LineNumber: > 0, LinePosition: > 0 }
                 ? TextRange.FromOneBased(ex.LineNumber, ex.LinePosition)
-                : (TextRange?)null;
+                : null;
 
             errors.Add(new JsonParseError
             {
@@ -685,9 +685,9 @@ public static class JsonParser
         }
     }
 
-    
+
     /// <summary>
-    /// Adds optional LSP-friendly artifacts (token spans and path map) to a base parse result, synchronously.
+    ///     Adds optional LSP-friendly artifacts (token spans and path map) to a base parse result, synchronously.
     /// </summary>
     /// <param name="baseResult">The base parse result.</param>
     /// <param name="options">Parse options that control artifact production.</param>
@@ -718,14 +718,13 @@ public static class JsonParser
         };
     }
 
-   
 
     /// <summary>
-    /// Concatenates two diagnostic lists, mutating the first list and returning it as a read-only view.
+    ///     Concatenates two diagnostic lists, mutating the first list and returning it as a read-only view.
     /// </summary>
-    /// <param name="a">The destination list to which <paramref name="b"/> will be appended.</param>
-    /// <param name="b">The read-only list whose items will be appended to <paramref name="a"/>.</param>
-    /// <returns>An <see cref="IReadOnlyList{T}"/> view of the combined diagnostics.</returns>
+    /// <param name="a">The destination list to which <paramref name="b" /> will be appended.</param>
+    /// <param name="b">The read-only list whose items will be appended to <paramref name="a" />.</param>
+    /// <returns>An <see cref="IReadOnlyList{T}" /> view of the combined diagnostics.</returns>
     internal static IReadOnlyList<JsonParseError> Merge(List<JsonParseError> a, IReadOnlyList<JsonParseError> b)
     {
         if (b.Count == 0) return a;
@@ -734,14 +733,17 @@ public static class JsonParser
     }
 
     /// <summary>
-    /// Builds a short two-line snippet for diagnostics that shows a slice of the line and a caret under the position.
-    /// When no line/column is available, returns a small preview of the source text.
+    ///     Builds a short two-line snippet for diagnostics that shows a slice of the line and a caret under the position.
+    ///     When no line/column is available, returns a small preview of the source text.
     /// </summary>
     /// <param name="source">The source text.</param>
     /// <param name="lineNumber">Optional 1-based line number.</param>
     /// <param name="linePosition">Optional 1-based column position.</param>
     /// <param name="radius">The number of characters to include on each side of the caret.</param>
-    /// <returns>A string containing either a preview or a two-line snippet with a caret; or <c>null</c> if the source is empty.</returns>
+    /// <returns>
+    ///     A string containing either a preview or a two-line snippet with a caret; or <c>null</c> if the source is
+    ///     empty.
+    /// </returns>
     internal static string? BuildSnippet(string source, int? lineNumber, int? linePosition, int radius)
     {
         if (string.IsNullOrEmpty(source)) return null;
@@ -793,6 +795,7 @@ public static class JsonParser
                 var c = text[i];
                 sb.Append(c == '\t' ? '\t' : ' ');
             }
+
             return sb.ToString();
         }
     }

@@ -6,13 +6,13 @@ namespace AzureBlueSolutions.Json.NET.Parsing;
 internal abstract class JsonParserAsync
 {
     /// <summary>
-    /// Core asynchronous implementation of the safe parser. Handles normalization, the initial parse,
-    /// and conditional sanitization and aggressive recovery passes.
+    ///     Core asynchronous implementation of the safe parser. Handles normalization, the initial parse,
+    ///     and conditional sanitization and aggressive recovery passes.
     /// </summary>
     /// <param name="text">The JSON text to parse. If <c>null</c>, the result contains an error and no root.</param>
     /// <param name="options">Parse options controlling normalization, duplicate key handling, artifacts, etc.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A task that resolves to a <see cref="JsonParseResult"/>.</returns>
+    /// <returns>A task that resolves to a <see cref="JsonParseResult" />.</returns>
     public static async Task<JsonParseResult> ParseSafeCoreAsync(
         string? text,
         ParseOptions? options,
@@ -52,7 +52,8 @@ internal abstract class JsonParserAsync
             });
 
             var spansOversized = options.ProduceTokenSpans
-                ? await Task.Run(() => new JsonTokenizer(text, default, cancellationToken).Tokenize(), cancellationToken)
+                ? await Task.Run(() => new JsonTokenizer(text, default, cancellationToken).Tokenize(),
+                    cancellationToken)
                 : [];
 
             return new JsonParseResult
@@ -524,8 +525,9 @@ internal abstract class JsonParserAsync
             }
         }, options, aggressive.Text, cancellationToken);
     }
+
     /// <summary>
-    /// Adds optional LSP-friendly artifacts (token spans and path map) to a base parse result, asynchronously.
+    ///     Adds optional LSP‑friendly artifacts (token spans and path map) to a base parse result, asynchronously.
     /// </summary>
     /// <param name="baseResult">The base parse result.</param>
     /// <param name="options">Parse options that control artifact production.</param>
@@ -541,13 +543,26 @@ internal abstract class JsonParserAsync
         if (options is { ProduceTokenSpans: false, ProducePathMap: false })
             return baseResult;
 
-        var spans = options.ProduceTokenSpans
-            ? await Task.Run(() => new JsonTokenizer(usedText, default, cancellationToken).Tokenize(), cancellationToken)
-            : [];
+        IReadOnlyList<JsonTokenSpan> spans = [];
+        IReadOnlyDictionary<string, JsonPathRange> paths = new Dictionary<string, JsonPathRange>();
 
-        var paths = options.ProducePathMap && baseResult.Root is not null
-            ? JsonPathMapper.Build(baseResult.Root, spans, cancellationToken)
-            : new Dictionary<string, JsonPathRange>();
+        if (options.ProduceTokenSpans)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            spans = await Task.Run(
+                () => new JsonTokenizer(usedText, options.TokenSpanLimit, cancellationToken).Tokenize(),
+                cancellationToken);
+        }
+
+        if (options.ProducePathMap && baseResult.Root is not null)
+        {
+            // Building the path map is fast and uses the produced spans; still respect cancellation.
+            cancellationToken.ThrowIfCancellationRequested();
+            paths = JsonPathMapper.Build(baseResult.Root, spans, cancellationToken);
+        }
 
         return baseResult with
         {
@@ -555,16 +570,17 @@ internal abstract class JsonParserAsync
             PathRanges = paths
         };
     }
+
     /// <summary>
-    /// Asynchronous counterpart of <see cref="JsonParser.TryParseSkippingLeadingComments"/> that uses async readers
-    /// when available and returns a task with the parse result.
+    ///     Asynchronous counterpart of <see cref="JsonParser.TryParseSkippingLeadingComments" /> that uses async readers
+    ///     when available and returns a task with the parse result.
     /// </summary>
     /// <param name="text">The JSON text to parse.</param>
     /// <param name="options">The parse options to apply.</param>
     /// <param name="stage">A stage label for diagnostics (e.g., "Initial", "Sanitized", "Aggressive").</param>
-    /// <param name="resolve">Function that resolves <see cref="ErrorKey"/> to code strings.</param>
+    /// <param name="resolve">Function that resolves <see cref="ErrorKey" /> to code strings.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A task that resolves to a <see cref="JsonParseResult"/>.</returns>
+    /// <returns>A task that resolves to a <see cref="JsonParseResult" />.</returns>
     private static async Task<JsonParseResult> TryParseSkippingLeadingCommentsAsync(
         string text,
         ParseOptions options,
@@ -679,5 +695,4 @@ internal abstract class JsonParserAsync
             return new JsonParseResult { Root = null, Errors = errors };
         }
     }
-
 }

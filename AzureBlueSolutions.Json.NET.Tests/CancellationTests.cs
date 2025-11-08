@@ -32,6 +32,7 @@ public sealed class CancellationTests
             if (i > 0) sb.Append(',');
             sb.Append(i);
         }
+
         sb.Append("]}");
         var bigJson = sb.ToString();
 
@@ -63,8 +64,10 @@ public sealed class CancellationTests
                 if (k > 0) objBuilder.Append(',');
                 objBuilder.Append('"').Append("k").Append(k).Append('"').Append(':').Append(i * 10 + k);
             }
+
             objBuilder.Append('}');
         }
+
         objBuilder.Append("]}");
         var bigValid = objBuilder.ToString();
 

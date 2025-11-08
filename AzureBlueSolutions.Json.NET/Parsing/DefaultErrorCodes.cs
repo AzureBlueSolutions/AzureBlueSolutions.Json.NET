@@ -1,30 +1,47 @@
 ﻿namespace AzureBlueSolutions.Json.NET;
 
 /// <summary>
-/// Provides the default mapping from <see cref="ErrorKey"/> values to short,
-/// stable code strings used in diagnostics (e.g., <c>"E002"</c>, <c>"W101"</c>).
+///     Provides the default mapping from <see cref="ErrorKey" /> values to short,
+///     stable code strings used in diagnostics (e.g., <c>"E002"</c>, <c>"W101"</c>).
 /// </summary>
 /// <remarks>
-/// The returned codes are grouped by prefix:
-/// <br/>
-/// <list type="bullet">
-/// <item><description><c>E</c> — Errors (e.g., <c>E000</c> Null input, <c>E002</c> Invalid token).</description></item>
-/// <item><description><c>W</c> — Warnings produced by sanitization/recovery (e.g., <c>W101</c> Trailing commas removed).</description></item>
-/// <item><description><c>I</c> — Informational notes (e.g., <c>I200</c> BOM removed, <c>I201</c> Line endings normalized).</description></item>
-/// <item><description><c>R</c> — Recovery actions performed (e.g., <c>R100</c> Missing commas inserted, <c>R101</c> Closers inserted).</description></item>
-/// </list>
+///     The returned codes are grouped by prefix:
+///     <br />
+///     <list type="bullet">
+///         <item>
+///             <description><c>E</c> — Errors (e.g., <c>E000</c> Null input, <c>E002</c> Invalid token).</description>
+///         </item>
+///         <item>
+///             <description>
+///                 <c>W</c> — Warnings produced by sanitization/recovery (e.g., <c>W101</c> Trailing commas
+///                 removed).
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 <c>I</c> — Informational notes (e.g., <c>I200</c> BOM removed, <c>I201</c> Line endings
+///                 normalized).
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 <c>R</c> — Recovery actions performed (e.g., <c>R100</c> Missing commas inserted, <c>R101</c>
+///                 Closers inserted).
+///             </description>
+///         </item>
+///     </list>
 /// </remarks>
 public static class DefaultErrorCodes
 {
     /// <summary>
-    /// Resolves the canonical code string for the specified <paramref name="key"/>.
+    ///     Resolves the canonical code string for the specified <paramref name="key" />.
     /// </summary>
     /// <param name="key">
-    /// The <see cref="ErrorKey"/> to map to a short, human‑readable code.
+    ///     The <see cref="ErrorKey" /> to map to a short, human‑readable code.
     /// </param>
     /// <returns>
-    /// The code string corresponding to <paramref name="key"/>. If the key is not recognized,
-    /// returns <c>"E000"</c>.
+    ///     The code string corresponding to <paramref name="key" />. If the key is not recognized,
+    ///     returns <c>"E000"</c>.
     /// </returns>
     public static string Resolve(ErrorKey key)
     {
@@ -59,7 +76,7 @@ public static class DefaultErrorCodes
             #endregion
 
             #region Recovery Codes
-            
+
             ErrorKey.MissingCommasInserted => "R100",
             ErrorKey.ClosersInserted => "R101",
 

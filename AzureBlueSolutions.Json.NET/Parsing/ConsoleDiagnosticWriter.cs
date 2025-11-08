@@ -1,22 +1,22 @@
 ﻿namespace AzureBlueSolutions.Json.NET;
 
 /// <summary>
-/// Writes parse diagnostics to the console with optional ANSI colorization,
-/// mirroring the structure used by other components in the package.
+///     Writes parse diagnostics to the console with optional ANSI colorization,
+///     mirroring the structure used by other components in the package.
 /// </summary>
 public static class ConsoleDiagnosticWriter
 {
     /// <summary>
-    /// Writes a sequence of diagnostics to the console.
+    ///     Writes a sequence of diagnostics to the console.
     /// </summary>
     /// <param name="errors">
-    /// The diagnostics to write. If <c>null</c>, nothing is written.
+    ///     The diagnostics to write. If <c>null</c>, nothing is written.
     /// </param>
     /// <param name="options">
-    /// Console color options. When <c>null</c>, <see cref="DiagnosticColorOptions.Default"/> is used.
+    ///     Console color options. When <c>null</c>, <see cref="DiagnosticColorOptions.Default" /> is used.
     /// </param>
     /// <param name="indentSpaces">
-    /// Number of leading spaces to indent each line. Must be non‑negative.
+    ///     Number of leading spaces to indent each line. Must be non‑negative.
     /// </param>
     public static void WriteErrors(IEnumerable<JsonParseError>? errors, DiagnosticColorOptions? options = null,
         int indentSpaces = 2)
@@ -26,17 +26,17 @@ public static class ConsoleDiagnosticWriter
     }
 
     /// <summary>
-    /// Writes a single diagnostic to the console, including stage, severity, code,
-    /// message, optional location/path, and an optional two‑line snippet with a caret.
+    ///     Writes a single diagnostic to the console, including stage, severity, code,
+    ///     message, optional location/path, and an optional two‑line snippet with a caret.
     /// </summary>
     /// <param name="error">
-    /// The diagnostic to write.
+    ///     The diagnostic to write.
     /// </param>
     /// <param name="options">
-    /// Console color options. When <c>null</c>, <see cref="DiagnosticColorOptions.Default"/> is used.
+    ///     Console color options. When <c>null</c>, <see cref="DiagnosticColorOptions.Default" /> is used.
     /// </param>
     /// <param name="indentSpaces">
-    /// Number of leading spaces to indent each line. Must be non‑negative.
+    ///     Number of leading spaces to indent each line. Must be non‑negative.
     /// </param>
     public static void Write(JsonParseError error, DiagnosticColorOptions? options = null, int indentSpaces = 2)
     {
@@ -117,17 +117,17 @@ public static class ConsoleDiagnosticWriter
     }
 
     /// <summary>
-    /// Writes <paramref name="value"/> to the console using <paramref name="color"/>
-    /// when <see cref="DiagnosticColorOptions.EnableColor"/> is <c>true</c>; otherwise writes without color.
+    ///     Writes <paramref name="value" /> to the console using <paramref name="color" />
+    ///     when <see cref="DiagnosticColorOptions.EnableColor" /> is <c>true</c>; otherwise writes without color.
     /// </summary>
     /// <param name="options">
-    /// Color configuration determining whether color is enabled and which colors to use.
+    ///     Color configuration determining whether color is enabled and which colors to use.
     /// </param>
     /// <param name="color">
-    /// The foreground color to apply when color is enabled.
+    ///     The foreground color to apply when color is enabled.
     /// </param>
     /// <param name="value">
-    /// The text to write.
+    ///     The text to write.
     /// </param>
     private static void WriteColored(DiagnosticColorOptions options, ConsoleColor color, string value)
     {
@@ -145,20 +145,20 @@ public static class ConsoleDiagnosticWriter
     }
 
     /// <summary>
-    /// Writes the caret line for a snippet character‑by‑character, preserving spacing and applying
-    /// <paramref name="caretColor"/> to '^' characters and <paramref name="spaceColor"/> to everything else.
+    ///     Writes the caret line for a snippet character‑by‑character, preserving spacing and applying
+    ///     <paramref name="caretColor" /> to '^' characters and <paramref name="spaceColor" /> to everything else.
     /// </summary>
     /// <param name="options">
-    /// Color configuration determining whether color is enabled and which colors to use.
+    ///     Color configuration determining whether color is enabled and which colors to use.
     /// </param>
     /// <param name="caretLine">
-    /// The caret line to write (typically consists of spaces/tabs and one or more '^' characters).
+    ///     The caret line to write (typically consists of spaces/tabs and one or more '^' characters).
     /// </param>
     /// <param name="spaceColor">
-    /// The color to use for non‑caret characters (e.g., spaces/tabs).
+    ///     The color to use for non‑caret characters (e.g., spaces/tabs).
     /// </param>
     /// <param name="caretColor">
-    /// The color to use for caret characters ('^').
+    ///     The color to use for caret characters ('^').
     /// </param>
     private static void WriteCaretLine(DiagnosticColorOptions options, string caretLine, ConsoleColor spaceColor,
         ConsoleColor caretColor)
@@ -191,13 +191,13 @@ public static class ConsoleDiagnosticWriter
     }
 
     /// <summary>
-    /// Splits a two‑line snippet into its content line and caret line.
+    ///     Splits a two‑line snippet into its content line and caret line.
     /// </summary>
     /// <param name="snippet">
-    /// The snippet text. If it does not contain a newline, it is treated as a single text line with no caret line.
+    ///     The snippet text. If it does not contain a newline, it is treated as a single text line with no caret line.
     /// </param>
     /// <returns>
-    /// A tuple of <c>(textLine, caretLine)</c>. <c>caretLine</c> may be <c>null</c> when not present.
+    ///     A tuple of <c>(textLine, caretLine)</c>. <c>caretLine</c> may be <c>null</c> when not present.
     /// </returns>
     private static (string? textLine, string? caretLine) SplitSnippet(string snippet)
     {
