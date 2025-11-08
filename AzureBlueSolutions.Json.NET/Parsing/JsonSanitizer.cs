@@ -3,10 +3,10 @@
 namespace AzureBlueSolutions.Json.NET;
 
 /// <summary>
-/// Performs fast, cancellation‑aware sanitization and light recovery over JSON‑like text,
-/// including comment removal, trailing comma removal, line ending normalization, control‑char
-/// filtering, closing unterminated property name strings, inserting missing commas, and
-/// inserting a single missing closer. Internal helper used by the parser pipeline.
+///     Performs fast, cancellation‑aware sanitization and light recovery over JSON‑like text,
+///     including comment removal, trailing comma removal, line ending normalization, control‑char
+///     filtering, closing unterminated property name strings, inserting missing commas, and
+///     inserting a single missing closer. Internal helper used by the parser pipeline.
 /// </summary>
 /// <param name="removeComments">Whether to remove line and block comments.</param>
 /// <param name="removeTrailingCommas">Whether to remove trailing commas before <c>]</c> or <c>}</c>.</param>
@@ -14,10 +14,13 @@ namespace AzureBlueSolutions.Json.NET;
 /// <param name="normalizeLineEndings">Whether to normalize CR/CRLF to LF.</param>
 /// <param name="fixUnterminatedStrings">Whether to close unterminated property name strings heuristically.</param>
 /// <param name="recoverMissingCommas">Whether to insert commas between adjacent values/properties.</param>
-/// <param name="recoverMissingClosers">Whether to insert a single missing <c>]</c> or <c>}</c> at EOF or newline boundaries.</param>
+/// <param name="recoverMissingClosers">
+///     Whether to insert a single missing <c>]</c> or <c>}</c> at EOF or newline
+///     boundaries.
+/// </param>
 /// <param name="cancellationToken">A token to observe for cancellation.</param>
 /// <param name="cooperativeYieldEvery">
-/// For async runs, yields roughly every N characters to keep the UI responsive.
+///     For async runs, yields roughly every N characters to keep the UI responsive.
 /// </param>
 internal sealed class JsonSanitizer(
     bool removeComments,
@@ -40,11 +43,11 @@ internal sealed class JsonSanitizer(
     private readonly bool _removeTrailingCommas = removeTrailingCommas;
 
     /// <summary>
-    /// Runs the sanitizer synchronously over <paramref name="text"/> and returns
-    /// the transformed text and a summary of applied changes.
+    ///     Runs the sanitizer synchronously over <paramref name="text" /> and returns
+    ///     the transformed text and a summary of applied changes.
     /// </summary>
     /// <param name="text">The input text to sanitize.</param>
-    /// <returns>A <see cref="Result"/> describing the sanitized text and change counters.</returns>
+    /// <returns>A <see cref="Result" /> describing the sanitized text and change counters.</returns>
     public Result Sanitize(string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -307,7 +310,6 @@ internal sealed class JsonSanitizer(
                 }
 
                 if (_recoverMissingCommas)
-                {
                     if (containers.Count > 0)
                     {
                         if (containers.Peek() == Container.Object && !expectingProperty && nextNonWs == '\"')
@@ -324,7 +326,6 @@ internal sealed class JsonSanitizer(
                             missingCommasInserted++;
                         }
                     }
-                }
             }
 
             sb.Append(c);
@@ -374,11 +375,11 @@ internal sealed class JsonSanitizer(
     }
 
     /// <summary>
-    /// Asynchronously runs the sanitizer over <paramref name="text"/> and returns
-    /// the transformed text and a summary of applied changes.
+    ///     Asynchronously runs the sanitizer over <paramref name="text" /> and returns
+    ///     the transformed text and a summary of applied changes.
     /// </summary>
     /// <param name="text">The input text to sanitize.</param>
-    /// <returns>A task that resolves to a <see cref="Result"/> with change counters.</returns>
+    /// <returns>A task that resolves to a <see cref="Result" /> with change counters.</returns>
     public async Task<Result> SanitizeAsync(string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -647,7 +648,6 @@ internal sealed class JsonSanitizer(
                 }
 
                 if (_recoverMissingCommas)
-                {
                     if (containers.Count > 0)
                     {
                         if (containers.Peek() == Container.Object && !expectingProperty && nextNonWs == '\"')
@@ -664,7 +664,6 @@ internal sealed class JsonSanitizer(
                             missingCommasInserted++;
                         }
                     }
-                }
             }
 
             sb.Append(c);
@@ -714,8 +713,8 @@ internal sealed class JsonSanitizer(
     }
 
     /// <summary>
-    /// Returns the next non‑whitespace character after <paramref name="startIndex"/>,
-    /// or <c>'\0'</c> if none is found.
+    ///     Returns the next non‑whitespace character after <paramref name="startIndex" />,
+    ///     or <c>'\0'</c> if none is found.
     /// </summary>
     private static char PeekNextNonWhitespace(string text, int startIndex)
     {
@@ -726,12 +725,13 @@ internal sealed class JsonSanitizer(
                 continue;
             return cj;
         }
+
         return '\0';
     }
 
     /// <summary>
-    /// Heuristic check whether a character can start a JSON value (string, object,
-    /// array, true/false/null, number).
+    ///     Heuristic check whether a character can start a JSON value (string, object,
+    ///     array, true/false/null, number).
     /// </summary>
     private static bool IsValueStarter(char c)
     {
@@ -746,18 +746,18 @@ internal sealed class JsonSanitizer(
     }
 
     /// <summary>
-    /// Result of a sanitization pass, including the transformed text and counters
-    /// describing what changes were applied.
+    ///     Result of a sanitization pass, including the transformed text and counters
+    ///     describing what changes were applied.
     /// </summary>
     internal sealed class Result
     {
         /// <summary>
-        /// The sanitized text produced by this pass.
+        ///     The sanitized text produced by this pass.
         /// </summary>
         public string Text { get; init; } = string.Empty;
 
         /// <summary>
-        /// Whether the sanitizer modified the input text.
+        ///     Whether the sanitizer modified the input text.
         /// </summary>
         public bool Changed { get; init; }
 

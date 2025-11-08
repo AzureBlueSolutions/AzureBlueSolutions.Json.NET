@@ -1,36 +1,22 @@
-﻿using System.Text;
-using AzureBlueSolutions.Json.NET.Parsing;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace AzureBlueSolutions.Json.NET;
+namespace AzureBlueSolutions.Json.NET.Parsing;
 
-/// <summary>
-///     High-level JSON parse helper that normalizes input, applies tolerant Newtonsoft.Json settings,
-///     and uses configurable sanitization and recovery passes to maximize successful parsing.
-///     Exposes both synchronous and asynchronous entry points and can optionally produce LSP-friendly artifacts.
-/// </summary>
-public static class JsonParser
+internal abstract class JsonParserAsync
 {
     /// <summary>
-    ///     Robust parse with normalization, tolerant settings, and sanitization fallback.
-    /// </summary>
-    /// <param name="text">The JSON text to parse.</param>
-    /// <param name="options">Optional parse options; if <c>null</c>, a new <see cref="ParseOptions" /> is used.</param>
-    /// <returns>A <see cref="JsonParseResult" /> with the parsed root (when successful) and any diagnostics.</returns>
-    public static JsonParseResult ParseSafe(string text, ParseOptions? options = null)
-    {
-        return ParseSafe(text, options, default);
-    }
-
-    /// <summary>
-    ///     Robust parse with normalization, tolerant settings, and sanitization fallback.
+    ///     Core asynchronous implementation of the safe parser. Handles normalization, the initial parse,
+    ///     and conditional sanitization and aggressive recovery passes.
     /// </summary>
     /// <param name="text">The JSON text to parse. If <c>null</c>, the result contains an error and no root.</param>
     /// <param name="options">Parse options controlling normalization, duplicate key handling, artifacts, etc.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A <see cref="JsonParseResult" /> with the parsed root (when successful) and any diagnostics.</returns>
-    public static JsonParseResult ParseSafe(string? text, ParseOptions? options, CancellationToken cancellationToken)
+    /// <returns>A task that resolves to a <see cref="JsonParseResult" />.</returns>
+    public static async Task<JsonParseResult> ParseSafeCoreAsync(
+        string? text,
+        ParseOptions? options,
+        CancellationToken cancellationToken)
     {
         options ??= new ParseOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -62,11 +48,12 @@ public static class JsonParser
                 Severity = ErrorSeverity.Error,
                 Message = $"Document exceeds the maximum allowed size of {options.MaxDocumentLength:N0} characters.",
                 Stage = "Initial",
-                Snippet = BuildSnippet(text, null, null, options.SnippetContextRadius)
+                Snippet = JsonParser.BuildSnippet(text, null, null, options.SnippetContextRadius)
             });
 
             var spansOversized = options.ProduceTokenSpans
-                ? new JsonTokenizer(text, default, cancellationToken).Tokenize()
+                ? await Task.Run(() => new JsonTokenizer(text, default, cancellationToken).Tokenize(),
+                    cancellationToken)
                 : [];
 
             return new JsonParseResult
@@ -120,7 +107,7 @@ public static class JsonParser
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var initial = TryParseSkippingLeadingComments(text, options, "Initial", resolve, cancellationToken);
+        var initial = await TryParseSkippingLeadingCommentsAsync(text, options, "Initial", resolve, cancellationToken);
         if (initial.Root is not null)
         {
             if (options.IncludeSanitizationDiagnostics || options.ReturnSanitizedText)
@@ -135,7 +122,7 @@ public static class JsonParser
                     options.RecoverMissingClosers,
                     cancellationToken);
 
-                var post = postSanitizer.Sanitize(text);
+                var post = await postSanitizer.SanitizeAsync(text);
 
                 if (post.Changed && options.IncludeSanitizationDiagnostics)
                 {
@@ -213,10 +200,10 @@ public static class JsonParser
                         });
                 }
 
-                return WithLspArtifacts(new JsonParseResult
+                return await WithLspArtifactsAsync(new JsonParseResult
                 {
                     Root = initial.Root,
-                    Errors = Merge(errors, initial.Errors),
+                    Errors = JsonParser.Merge(errors, initial.Errors),
                     SanitizedText = options.ReturnSanitizedText ? post.Text : null,
                     Report = new JsonSanitizationReport
                     {
@@ -232,13 +219,13 @@ public static class JsonParser
                         MissingCommasInserted = post.MissingCommasInserted,
                         ClosersInserted = post.ClosersInserted
                     }
-                }, options, /* usedText: */ post.Changed ? post.Text : text, cancellationToken);
+                }, options, text, cancellationToken);
             }
 
-            return WithLspArtifacts(new JsonParseResult
+            return await WithLspArtifactsAsync(new JsonParseResult
             {
                 Root = initial.Root,
-                Errors = Merge(errors, initial.Errors),
+                Errors = JsonParser.Merge(errors, initial.Errors),
                 Report = new JsonSanitizationReport { Stage = "Initial", Changed = false }
             }, options, text, cancellationToken);
         }
@@ -246,7 +233,7 @@ public static class JsonParser
         errors.AddRange(initial.Errors);
 
         if (!options.EnableSanitizationFallback)
-            return WithLspArtifacts(new JsonParseResult
+            return await WithLspArtifactsAsync(new JsonParseResult
             {
                 Root = null,
                 Errors = errors,
@@ -263,7 +250,7 @@ public static class JsonParser
             options.RecoverMissingClosers,
             cancellationToken);
 
-        var sanitized = sanitizer.Sanitize(text);
+        var sanitized = await sanitizer.SanitizeAsync(text);
 
         if (options.IncludeSanitizationDiagnostics)
         {
@@ -343,7 +330,7 @@ public static class JsonParser
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var sanitizedAttempt = TryParseSkippingLeadingComments(
+        var sanitizedAttempt = await TryParseSkippingLeadingCommentsAsync(
             sanitized.Text,
             options with { AllowComments = false },
             "Sanitized",
@@ -351,10 +338,10 @@ public static class JsonParser
             cancellationToken);
 
         if (sanitizedAttempt.Root is not null)
-            return WithLspArtifacts(new JsonParseResult
+            return await WithLspArtifactsAsync(new JsonParseResult
             {
                 Root = sanitizedAttempt.Root,
-                Errors = Merge(errors, sanitizedAttempt.Errors),
+                Errors = JsonParser.Merge(errors, sanitizedAttempt.Errors),
                 SanitizedText = options.ReturnSanitizedText && sanitized.Changed ? sanitized.Text : null,
                 Report = new JsonSanitizationReport
                 {
@@ -375,7 +362,7 @@ public static class JsonParser
         errors.AddRange(sanitizedAttempt.Errors);
 
         if (!options.EnableAggressiveRecovery)
-            return WithLspArtifacts(new JsonParseResult
+            return await WithLspArtifactsAsync(new JsonParseResult
             {
                 Root = null,
                 Errors = errors,
@@ -406,7 +393,7 @@ public static class JsonParser
             true,
             cancellationToken);
 
-        var aggressive = aggressiveSanitizer.Sanitize(text);
+        var aggressive = await aggressiveSanitizer.SanitizeAsync(text);
 
         if (options.IncludeSanitizationDiagnostics)
         {
@@ -486,7 +473,7 @@ public static class JsonParser
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var aggressiveAttempt = TryParseSkippingLeadingComments(
+        var aggressiveAttempt = await TryParseSkippingLeadingCommentsAsync(
             aggressive.Text,
             options with { AllowComments = false },
             "Aggressive",
@@ -494,10 +481,10 @@ public static class JsonParser
             cancellationToken);
 
         if (aggressiveAttempt.Root is not null)
-            return WithLspArtifacts(new JsonParseResult
+            return await WithLspArtifactsAsync(new JsonParseResult
             {
                 Root = aggressiveAttempt.Root,
-                Errors = Merge(errors, aggressiveAttempt.Errors),
+                Errors = JsonParser.Merge(errors, aggressiveAttempt.Errors),
                 SanitizedText = options.ReturnSanitizedText ? aggressive.Text : null,
                 Report = new JsonSanitizationReport
                 {
@@ -517,15 +504,11 @@ public static class JsonParser
 
         errors.AddRange(aggressiveAttempt.Errors);
 
-        return WithLspArtifacts(new JsonParseResult
+        return await WithLspArtifactsAsync(new JsonParseResult
         {
             Root = null,
             Errors = errors,
-            SanitizedText = options.ReturnSanitizedText
-                ? aggressive.Text
-                : options.ReturnSanitizedText
-                    ? sanitized.Text
-                    : null,
+            SanitizedText = options.ReturnSanitizedText ? aggressive.Text : null,
             Report = new JsonSanitizationReport
             {
                 Stage = "Aggressive",
@@ -544,32 +527,61 @@ public static class JsonParser
     }
 
     /// <summary>
-    ///     Asynchronously parses JSON with normalization, tolerant settings, and async sanitization fallback.
+    ///     Adds optional LSP‑friendly artifacts (token spans and path map) to a base parse result, asynchronously.
     /// </summary>
-    /// <param name="text">The JSON text to parse.</param>
-    /// <param name="options">Optional parse options; if <c>null</c>, a new <see cref="ParseOptions" /> is used.</param>
+    /// <param name="baseResult">The base parse result.</param>
+    /// <param name="options">Parse options that control artifact production.</param>
+    /// <param name="usedText">The exact text that was parsed (potentially sanitized).</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A task that resolves to a <see cref="JsonParseResult" />.</returns>
-    public static Task<JsonParseResult> ParseSafeAsync(
-        string text,
-        ParseOptions? options = null,
-        CancellationToken cancellationToken = default)
+    /// <returns>A task that resolves to the result augmented with artifact data.</returns>
+    private static async Task<JsonParseResult> WithLspArtifactsAsync(
+        JsonParseResult baseResult,
+        ParseOptions options,
+        string usedText,
+        CancellationToken cancellationToken)
     {
-        return JsonParserAsync.ParseSafeCoreAsync(text, options, cancellationToken);
+        if (options is { ProduceTokenSpans: false, ProducePathMap: false })
+            return baseResult;
+
+        IReadOnlyList<JsonTokenSpan> spans = [];
+        IReadOnlyDictionary<string, JsonPathRange> paths = new Dictionary<string, JsonPathRange>();
+
+        if (options.ProduceTokenSpans)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            spans = await Task.Run(
+                () => new JsonTokenizer(usedText, options.TokenSpanLimit, cancellationToken).Tokenize(),
+                cancellationToken);
+        }
+
+        if (options.ProducePathMap && baseResult.Root is not null)
+        {
+            // Building the path map is fast and uses the produced spans; still respect cancellation.
+            cancellationToken.ThrowIfCancellationRequested();
+            paths = JsonPathMapper.Build(baseResult.Root, spans, cancellationToken);
+        }
+
+        return baseResult with
+        {
+            TokenSpans = spans,
+            PathRanges = paths
+        };
     }
 
-
     /// <summary>
-    ///     Tries to parse JSON by skipping any leading comments, using the given <see cref="ParseOptions" />.
-    ///     Returns a result with either a root token or diagnostics when parsing fails.
+    ///     Asynchronous counterpart of <see cref="JsonParser.TryParseSkippingLeadingComments" /> that uses async readers
+    ///     when available and returns a task with the parse result.
     /// </summary>
     /// <param name="text">The JSON text to parse.</param>
     /// <param name="options">The parse options to apply.</param>
     /// <param name="stage">A stage label for diagnostics (e.g., "Initial", "Sanitized", "Aggressive").</param>
     /// <param name="resolve">Function that resolves <see cref="ErrorKey" /> to code strings.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>A <see cref="JsonParseResult" /> representing the outcome.</returns>
-    private static JsonParseResult TryParseSkippingLeadingComments(
+    /// <returns>A task that resolves to a <see cref="JsonParseResult" />.</returns>
+    private static async Task<JsonParseResult> TryParseSkippingLeadingCommentsAsync(
         string text,
         ParseOptions options,
         string stage,
@@ -594,17 +606,16 @@ public static class JsonParser
         try
         {
             using var sr = new StringReader(text);
-            using var reader = new JsonTextReader(sr)
-            {
-                SupportMultipleContent = true,
-                MaxDepth = options.MaxDepth > 0 ? options.MaxDepth : null
-            };
+            // JsonTextReader is not IAsyncDisposable; standard using is appropriate.
+            await using var reader = new JsonTextReader(sr);
+            reader.SupportMultipleContent = true;
+            reader.MaxDepth = options.MaxDepth > 0 ? options.MaxDepth : null;
 
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (!reader.Read())
+                if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     return new JsonParseResult
                     {
                         Root = null,
@@ -616,14 +627,14 @@ public static class JsonParser
                                 Severity = ErrorSeverity.Error,
                                 Message = "No JSON content found.",
                                 Stage = stage,
-                                Snippet = BuildSnippet(text, null, null, options.SnippetContextRadius)
+                                Snippet = JsonParser.BuildSnippet(text, null, null, options.SnippetContextRadius)
                             }
                         }
                     };
 
                 if (reader.TokenType == JsonToken.Comment) continue;
 
-                var token = JToken.ReadFrom(reader, loadSettings);
+                var token = await JToken.ReadFromAsync(reader, loadSettings, cancellationToken).ConfigureAwait(false);
                 return new JsonParseResult
                 {
                     Root = token,
@@ -660,7 +671,7 @@ public static class JsonParser
                 LinePosition = ex.LinePosition,
                 Path = ex.Path,
                 Stage = stage,
-                Snippet = BuildSnippet(text, ex.LineNumber, ex.LinePosition, options.SnippetContextRadius),
+                Snippet = JsonParser.BuildSnippet(text, ex.LineNumber, ex.LinePosition, options.SnippetContextRadius),
                 Range = lspRange
             });
 
@@ -678,125 +689,10 @@ public static class JsonParser
                 Severity = ErrorSeverity.Error,
                 Message = ex.Message,
                 Stage = stage,
-                Snippet = BuildSnippet(text, null, null, options.SnippetContextRadius)
+                Snippet = JsonParser.BuildSnippet(text, null, null, options.SnippetContextRadius)
             });
 
             return new JsonParseResult { Root = null, Errors = errors };
-        }
-    }
-
-
-    /// <summary>
-    ///     Adds optional LSP-friendly artifacts (token spans and path map) to a base parse result, synchronously.
-    /// </summary>
-    /// <param name="baseResult">The base parse result.</param>
-    /// <param name="options">Parse options that control artifact production.</param>
-    /// <param name="usedText">The exact text that was parsed (potentially sanitized).</param>
-    /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>The result augmented with token spans and/or path ranges as requested.</returns>
-    private static JsonParseResult WithLspArtifacts(
-        JsonParseResult baseResult,
-        ParseOptions options,
-        string usedText,
-        CancellationToken cancellationToken)
-    {
-        if (options is { ProduceTokenSpans: false, ProducePathMap: false })
-            return baseResult;
-
-        var spans = options.ProduceTokenSpans
-            ? new JsonTokenizer(usedText, options.TokenSpanLimit, cancellationToken).Tokenize()
-            : [];
-
-        var paths = options.ProducePathMap && baseResult.Root is not null
-            ? JsonPathMapper.Build(baseResult.Root, spans, cancellationToken)
-            : new Dictionary<string, JsonPathRange>();
-
-        return baseResult with
-        {
-            TokenSpans = spans,
-            PathRanges = paths
-        };
-    }
-
-
-    /// <summary>
-    ///     Concatenates two diagnostic lists, mutating the first list and returning it as a read-only view.
-    /// </summary>
-    /// <param name="a">The destination list to which <paramref name="b" /> will be appended.</param>
-    /// <param name="b">The read-only list whose items will be appended to <paramref name="a" />.</param>
-    /// <returns>An <see cref="IReadOnlyList{T}" /> view of the combined diagnostics.</returns>
-    internal static IReadOnlyList<JsonParseError> Merge(List<JsonParseError> a, IReadOnlyList<JsonParseError> b)
-    {
-        if (b.Count == 0) return a;
-        a.AddRange(b);
-        return a;
-    }
-
-    /// <summary>
-    ///     Builds a short two-line snippet for diagnostics that shows a slice of the line and a caret under the position.
-    ///     When no line/column is available, returns a small preview of the source text.
-    /// </summary>
-    /// <param name="source">The source text.</param>
-    /// <param name="lineNumber">Optional 1-based line number.</param>
-    /// <param name="linePosition">Optional 1-based column position.</param>
-    /// <param name="radius">The number of characters to include on each side of the caret.</param>
-    /// <returns>
-    ///     A string containing either a preview or a two-line snippet with a caret; or <c>null</c> if the source is
-    ///     empty.
-    /// </returns>
-    internal static string? BuildSnippet(string source, int? lineNumber, int? linePosition, int radius)
-    {
-        if (string.IsNullOrEmpty(source)) return null;
-
-        if (lineNumber is null || linePosition is null)
-        {
-            var preview = source.Length <= radius * 2 ? source : source[..(radius * 2)];
-            return preview;
-        }
-
-        var lines = source.Split('\n');
-        var lineIndex = Math.Clamp(lineNumber.Value - 1, 0, Math.Max(0, lines.Length - 1));
-        var line = lines[lineIndex].Replace("\r", string.Empty);
-
-        var caretPos = Math.Max(1, linePosition.Value);
-        if (caretPos > line.Length + 1) caretPos = line.Length + 1;
-
-        var caretIndex0 = Math.Min(Math.Max(0, caretPos - 1), line.Length);
-
-        if (caretIndex0 < line.Length && (line[caretIndex0] == ' ' || line[caretIndex0] == '\t'))
-        {
-            var j = caretIndex0;
-            while (j < line.Length && (line[j] == ' ' || line[j] == '\t')) j++;
-            if (j < line.Length) caretIndex0 = j;
-        }
-
-        if (line.Length <= radius * 2)
-        {
-            var caretLine = MirrorWhitespacePrefix(line, caretIndex0) + "^";
-            return line + "\n" + caretLine;
-        }
-
-        var start = Math.Max(0, caretIndex0 - radius);
-        var end = Math.Min(line.Length, caretIndex0 + radius);
-        var slice = line.Substring(start, end - start);
-        var caretInSlice = caretIndex0 - start;
-        if (caretInSlice < 0) caretInSlice = 0;
-        if (caretInSlice > slice.Length) caretInSlice = slice.Length;
-
-        var caretLineSliced = MirrorWhitespacePrefix(slice, caretInSlice) + "^";
-        return slice + "\n" + caretLineSliced;
-
-        static string MirrorWhitespacePrefix(string text, int count)
-        {
-            if (count <= 0) return string.Empty;
-            var sb = new StringBuilder(count);
-            for (var i = 0; i < count && i < text.Length; i++)
-            {
-                var c = text[i];
-                sb.Append(c == '\t' ? '\t' : ' ');
-            }
-
-            return sb.ToString();
         }
     }
 }

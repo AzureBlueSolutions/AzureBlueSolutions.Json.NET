@@ -3,48 +3,48 @@
 namespace AzureBlueSolutions.Json.NET;
 
 /// <summary>
-/// Represents the source ranges associated with a single JSON path.
-/// Includes the range for the property name (when applicable) and the range for the value.
+///     Represents the source ranges associated with a single JSON path.
+///     Includes the range for the property name (when applicable) and the range for the value.
 /// </summary>
 public sealed record JsonPathRange
 {
     /// <summary>
-    /// The JSON path this entry corresponds to.
+    ///     The JSON path this entry corresponds to.
     /// </summary>
     public string Path { get; init; } = string.Empty;
 
     /// <summary>
-    /// The source range of the property name associated with <see cref="Path"/>, if applicable.
+    ///     The source range of the property name associated with <see cref="Path" />, if applicable.
     /// </summary>
     public TextRange? Name { get; init; }
 
     /// <summary>
-    /// The source range of the value associated with <see cref="Path"/>, if applicable.
+    ///     The source range of the value associated with <see cref="Path" />, if applicable.
     /// </summary>
     public TextRange? Value { get; init; }
 }
 
 /// <summary>
-/// Builds a mapping between JSON paths and their corresponding source ranges
-/// (property name and value), using token information for precise locations.
+///     Builds a mapping between JSON paths and their corresponding source ranges
+///     (property name and value), using token information for precise locations.
 /// </summary>
 internal static class JsonPathMapper
 {
     /// <summary>
-    /// Builds a map of JSON paths to token ranges, honoring cancellation.
+    ///     Builds a map of JSON paths to token ranges, honoring cancellation.
     /// </summary>
     /// <param name="root">
-    /// The root <see cref="JToken"/> of the parsed JSON document.
+    ///     The root <see cref="JToken" /> of the parsed JSON document.
     /// </param>
     /// <param name="tokens">
-    /// The token stream produced by lexing the document.
+    ///     The token stream produced by lexing the document.
     /// </param>
     /// <param name="cancellationToken">
-    /// A token to observe for cancellation.
+    ///     A token to observe for cancellation.
     /// </param>
     /// <returns>
-    /// A dictionary mapping each JSON path to a <see cref="JsonPathRange"/> containing
-    /// the name and value ranges where applicable.
+    ///     A dictionary mapping each JSON path to a <see cref="JsonPathRange" /> containing
+    ///     the name and value ranges where applicable.
     /// </returns>
     public static IReadOnlyDictionary<string, JsonPathRange> Build(
         JToken root,
@@ -59,7 +59,6 @@ internal static class JsonPathMapper
         foreach (var node in Traverse(root, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             var info = node.GetLineInfo();
             if (info is null) continue;
 
@@ -105,6 +104,14 @@ internal static class JsonPathMapper
                         {
                             valueToken = tokens[i];
                             valueRange = tokens[i].Range;
+
+                            // Broaden the value range if it starts with an array or object.
+                            if (valueToken.Kind is JsonLexemeKind.LeftBracket or JsonLexemeKind.LeftBrace)
+                            {
+                                var closeIdx = FindMatchingContainerEndIndex(tokens, i);
+                                var endPos = tokens[Math.Max(i, closeIdx)].Range.End;
+                                valueRange = new TextRange(valueRange.Start, endPos);
+                            }
                         }
                     }
                 }
@@ -143,6 +150,14 @@ internal static class JsonPathMapper
                         {
                             valueToken = tokens[j];
                             valueRange = tokens[j].Range;
+
+                            // Broaden the value range if it starts with an array or object.
+                            if (valueToken.Kind is JsonLexemeKind.LeftBracket or JsonLexemeKind.LeftBrace)
+                            {
+                                var closeIdx = FindMatchingContainerEndIndex(tokens, j);
+                                var endPos = tokens[Math.Max(j, closeIdx)].Range.End;
+                                valueRange = new TextRange(valueRange.Start, endPos);
+                            }
                         }
                     }
                 }
@@ -206,27 +221,33 @@ internal static class JsonPathMapper
                                     nameSpan ??= tokens[nameIdx];
                             }
                         }
+
+                        // Defensive: broaden here as well, regardless of which path set valueRange.
+                        if (valueRange is not null &&
+                            (tokens[vIndex].Kind == JsonLexemeKind.LeftBracket ||
+                             tokens[vIndex].Kind == JsonLexemeKind.LeftBrace))
+                        {
+                            var closeIdx = FindMatchingContainerEndIndex(tokens, vIndex);
+                            var endPos = tokens[Math.Max(vIndex, closeIdx)].Range.End;
+                            valueRange = new TextRange(valueRange.Start, endPos);
+                        }
                     }
                 }
 
                 if (nameSpan is null || valueRange is null) continue;
 
                 if (!result.TryGetValue(prop.Path, out var existing)) existing = new JsonPathRange { Path = prop.Path };
-
                 var combined = existing with
                 {
                     Name = nameSpan.Range,
                     Value = valueRange
                 };
-
                 result[prop.Path] = combined;
             }
             else if (node is JValue)
             {
                 if (!TryFindToken(startIndex, tokens, zl, zc, out var vspan)) continue;
-
                 if (!result.TryGetValue(node.Path, out var existing)) existing = new JsonPathRange { Path = node.Path };
-
                 result[node.Path] = existing with
                 {
                     Name = existing.Name,
@@ -239,7 +260,7 @@ internal static class JsonPathMapper
     }
 
     /// <summary>
-    /// Traverses the token tree in a non-recursive depth-first manner, yielding nodes.
+    ///     Traverses the token tree in a non-recursive depth-first manner, yielding nodes.
     /// </summary>
     /// <param name="root">The root node to traverse.</param>
     /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -247,14 +268,11 @@ internal static class JsonPathMapper
     {
         var stack = new Stack<JToken>();
         stack.Push(root);
-
         while (stack.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             var current = stack.Pop();
             yield return current;
-
             foreach (var child in current.Children())
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -264,14 +282,48 @@ internal static class JsonPathMapper
     }
 
     /// <summary>
-    /// Builds a lookup from (line, column) to token for fast start-position searches.
+    ///     Finds the index of the token that closes the container that starts at <paramref name="startIndex" />.
+    ///     If the token at <paramref name="startIndex" /> is not a left bracket/brace, returns <paramref name="startIndex" />.
+    /// </summary>
+    /// <param name="tokens">The token stream.</param>
+    /// <param name="startIndex">Index of the opening '[' or '{' token.</param>
+    /// <returns>The index of the matching ']' or '}' token; or <paramref name="startIndex" /> if not found.</returns>
+    private static int FindMatchingContainerEndIndex(IReadOnlyList<JsonTokenSpan> tokens, int startIndex)
+    {
+        if (startIndex < 0 || startIndex >= tokens.Count) return startIndex;
+
+        var startKind = tokens[startIndex].Kind;
+        if (startKind != JsonLexemeKind.LeftBracket && startKind != JsonLexemeKind.LeftBrace)
+            return startIndex;
+
+        int obj = 0, arr = 0;
+        for (var i = startIndex; i < tokens.Count; i++)
+            switch (tokens[i].Kind)
+            {
+                case JsonLexemeKind.LeftBrace: obj++; break;
+                case JsonLexemeKind.RightBrace:
+                    obj--;
+                    if (obj == 0 && arr == 0 && startKind == JsonLexemeKind.LeftBrace) return i;
+                    break;
+                case JsonLexemeKind.LeftBracket: arr++; break;
+                case JsonLexemeKind.RightBracket:
+                    arr--;
+                    if (arr == 0 && obj == 0 && startKind == JsonLexemeKind.LeftBracket) return i;
+                    break;
+            }
+
+        // Fallback when unmatched
+        return startIndex;
+    }
+
+    /// <summary>
+    ///     Builds a lookup from (line, column) to token for fast start-position searches.
     /// </summary>
     /// <param name="tokens">The token stream.</param>
     /// <returns>A dictionary keyed by start (line, column) with token values.</returns>
     private static Dictionary<(int line, int col), JsonTokenSpan> BuildStartIndex(IReadOnlyList<JsonTokenSpan> tokens)
     {
         var map = new Dictionary<(int, int), JsonTokenSpan>();
-
         foreach (var t in tokens)
         {
             var key = (t.Range.Start.Line, t.Range.Start.Column);
@@ -282,9 +334,9 @@ internal static class JsonPathMapper
     }
 
     /// <summary>
-    /// Attempts to find the token that starts at or contains the specified (line, column).
+    ///     Attempts to find the token that starts at or contains the specified (line, column).
     /// </summary>
-    /// <param name="index">The start-position index built by <see cref="BuildStartIndex"/>.</param>
+    /// <param name="index">The start-position index built by <see cref="BuildStartIndex" />.</param>
     /// <param name="tokens">The full token stream.</param>
     /// <param name="line">Zero-based line number.</param>
     /// <param name="col">Zero-based column number.</param>
@@ -304,13 +356,10 @@ internal static class JsonPathMapper
         {
             var s = t.Range.Start;
             var e = t.Range.End;
-
-            var afterStart = line > s.Line ||
-                             (line == s.Line && col >= s.Column);
-
-            var beforeEnd = line < e.Line ||
-                            (line == e.Line && col < e.Column);
-
+            var afterStart = line > s.Line
+                             || (line == s.Line && col >= s.Column);
+            var beforeEnd = line < e.Line
+                            || (line == e.Line && col < e.Column);
             if (afterStart && beforeEnd)
             {
                 span = t;
@@ -323,8 +372,8 @@ internal static class JsonPathMapper
     }
 
     /// <summary>
-    /// Finds the first token index whose start offset is at or after <paramref name="startOffset"/>
-    /// and whose kind matches <paramref name="kindToFind"/>.
+    ///     Finds the first token index whose start offset is at or after <paramref name="startOffset" />
+    ///     and whose kind matches <paramref name="kindToFind" />.
     /// </summary>
     /// <param name="tokens">The token stream.</param>
     /// <param name="startOffset">The minimum start offset (inclusive).</param>
@@ -341,6 +390,7 @@ internal static class JsonPathMapper
             if (t.Range.Start.Offset >= startOffset && t.Kind == kindToFind)
                 return i;
         }
+
         return -1;
     }
 }
